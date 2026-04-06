@@ -45,6 +45,7 @@ def answer(query: str, chunks: list) -> tuple[str, list[dict]]:
             "name":    c.payload["source_name"],
             "type":    c.payload["source_type"],
             "snippet": c.payload["text"][:150] + "...",
+            "score":   round(c.score * 100, 1) if hasattr(c, 'score') else None,
         }
         for c in chunks
     ]

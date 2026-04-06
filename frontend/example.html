@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AskMyDocs Widget Example</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 40px;
+        }
+        .example-section {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 40px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .code-block {
+            background: #f8f8f8;
+            padding: 12px;
+            border-radius: 4px;
+            margin: 12px 0;
+            overflow-x: auto;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            border-left: 3px solid #007AFF;
+        }
+        .widget-container {
+            display: flex;
+            gap: 40px;
+            margin-top: 20px;
+        }
+        .example-widget {
+            flex: 1;
+        }
+        .documentation {
+            flex: 1;
+        }
+        .documentation h3 {
+            margin-bottom: 12px;
+            color: #333;
+        }
+        .documentation p {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.6;
+            margin-bottom: 12px;
+        }
+        code {
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📄 AskMyDocs Widget Example</h1>
+        <p class="subtitle">Embed the AskMyDocs chat widget on any website</p>
+
+        <div class="example-section">
+            <div class="widget-container">
+                <div class="example-widget">
+                    <h2 style="margin-bottom: 20px;">Live Widget Demo</h2>
+                    <!-- Widget embed code -->
+                    <div id="askmydocs-widget" data-source="my-docs"></div>
+                </div>
+
+                <div class="documentation">
+                    <h3>How to embed on your site:</h3>
+                    <p>1. Copy this script tag to your HTML:</p>
+                    <div class="code-block">
+&lt;script src="https://your-api.railway.app/widget.js"&gt;&lt;/script&gt;
+                    </div>
+
+                    <p>2. Add the widget div where you want it to appear:</p>
+                    <div class="code-block">
+&lt;div id="askmydocs-widget" data-source="my-docs"&gt;&lt;/div&gt;
+                    </div>
+
+                    <h3 style="margin-top: 24px;">Widget attributes:</h3>
+                    <p><code>data-source</code> (required): The name of the document to search within. Use "all" to search all documents.</p>
+
+                    <h3 style="margin-top: 24px;">Features:</h3>
+                    <ul style="color: #666; font-size: 14px; line-height: 1.8; margin-left: 20px;">
+                        <li>✓ Real-time chat interface</li>
+                        <li>✓ Source citations with match scores</li>
+                        <li>✓ Responsive design</li>
+                        <li>✓ Cross-origin compatible</li>
+                        <li>✓ No dependencies</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="example-section">
+            <h2>API Endpoint Reference</h2>
+            <p style="color: #666; margin-bottom: 20px;">The widget uses the following REST API endpoint:</p>
+
+            <h3 style="margin-bottom: 12px;">POST /api/chat</h3>
+            <p style="color: #666; margin-bottom: 12px;"><strong>Request:</strong></p>
+            <div class="code-block">
+{
+  "query": "What is the main topic?",
+  "source_name": "my-docs"
+}
+            </div>
+
+            <p style="color: #666; margin: 20px 0 12px;">
+                <strong>Response:</strong>
+            </p>
+            <div class="code-block">
+{
+  "answer": "The main topic is...",
+  "sources": [
+    {
+      "name": "document-name",
+      "type": "pdf",
+      "snippet": "Relevant excerpt from the document...",
+      "score": 92.5
+    }
+  ]
+}
+            </div>
+        </div>
+
+        <div class="example-section" style="background: #f0f8ff; border-left: 4px solid #007AFF;">
+            <h3 style="margin-bottom: 12px;">🚀 Deployment:</h3>
+            <p style="color: #333; margin-bottom: 12px;">
+                To deploy the API, run:
+            </p>
+            <div class="code-block" style="border-left-color: #007AFF;">
+python -m uvicorn backend.api:app --host 0.0.0.0 --port 8000
+            </div>
+        </div>
+    </div>
+
+    <!-- Widget initialization -->
+    <script src="/widget.js"></script>
+</body>
+</html>

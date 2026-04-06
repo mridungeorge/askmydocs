@@ -34,13 +34,20 @@ class Chunk:
 # ── Text extraction ───────────────────────────────────────────────────────────
 def extract_from_url(url: str) -> tuple[str, str]:
     """Fetch a webpage and return (title, clean_text)."""
-    r = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
-    soup = BeautifulSoup(r.text, "html.parser")
-    for tag in soup(["script", "style", "nav", "footer", "header"]):
-        tag.decompose()
-    title = soup.title.string if soup.title else url
-    text  = re.sub(r'\n{3,}', '\n\n', soup.get_text(separator="\n"))
-    return title.strip(), text.strip()
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+        r = requests.get(url, timeout=15, headers=headers)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+        for tag in soup(["script", "style", "nav", "footer", "header"]):
+            tag.decompose()
+        title = soup.title.string if soup.title else url
+        text = re.sub(r'\n{3,}', '\n\n', soup.get_text(separator="\n"))
+        return title.strip(), text.strip()
+    except Exception as e:
+        raise Exception(f"Could not fetch URL. Try a different URL or use PDF upload. Error: {e}")
 
 def extract_from_pdf(file_bytes: bytes, filename: str) -> tuple[str, str]:
     """Extract text from PDF bytes, return (filename, text)."""

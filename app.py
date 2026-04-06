@@ -426,6 +426,25 @@ hr {
     font-size: 12px !important;
     font-weight: 300 !important;
 }
+
+/* ── Column buttons (toggle, delete, etc) ── */
+[data-testid="stButton"] button[kind="secondary"] {
+    font-family: 'Noto Sans JP', sans-serif !important;
+    font-size: 14px !important;
+    font-weight: 300 !important;
+    border: 1px solid #d8d8d2 !important;
+    background: #fafaf8 !important;
+    color: #1a1a1a !important;
+}
+
+[data-testid="stButton"] button[kind="secondary"]:hover {
+    background: #f2f2ee !important;
+}
+
+/* ── Columns layout ── */
+[data-testid="stColumn"] {
+    gap: 0 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -435,61 +454,84 @@ if "source_name"   not in st.session_state: st.session_state.source_name   = Non
 if "ingested"      not in st.session_state: st.session_state.ingested      = False
 if "all_sources"   not in st.session_state: st.session_state.all_sources   = []
 if "source_filter" not in st.session_state: st.session_state.source_filter = None
+if "show_upload"   not in st.session_state: st.session_state.show_upload   = True
+if "show_logs"     not in st.session_state: st.session_state.show_logs     = False
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown('<div class="sidebar-mark">Document</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-label">Load source</div>', unsafe_allow_html=True)
+    
+    # ── Upload section (always accessible) ──
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        toggle = "−" if st.session_state.show_upload else "+"
+        if st.button(toggle, key="upload_toggle", use_container_width=True):
+            st.session_state.show_upload = not st.session_state.show_upload
+            st.rerun()
+    with col2:
+        st.markdown('<div class="section-label">Add Source</div>', unsafe_allow_html=True)
+    
+    if st.session_state.show_upload:
+        tab_url, tab_pdf = st.tabs(["URL", "PDF"])
 
-    tab_url, tab_pdf = st.tabs(["URL", "PDF"])
+        with tab_url:
+            url = st.text_input(
+                "URL",
+                placeholder="https://...",
+                label_visibility="collapsed"
+            )
+            if st.button("Index URL", disabled=not url):
+                with st.spinner("fetching · chunking · embedding"):
+                    try:
+                        title, text = extract_from_url(url)
+                        n = ingest(title, "url", text)
+                        st.session_state.source_name = title
+                        st.session_state.ingested    = True
+                        st.session_state.messages    = []
+                        if title not in st.session_state.all_sources:
+                            st.session_state.all_sources.append(title)
+                        st.success(f"{n} chunks indexed")
+                    except Exception as e:
+                        st.error(str(e))
 
-    with tab_url:
-        url = st.text_input(
-            "URL",
-            placeholder="https://...",
-            label_visibility="collapsed"
-        )
-        if st.button("Index URL", disabled=not url):
-            with st.spinner("fetching · chunking · embedding"):
-                try:
-                    title, text = extract_from_url(url)
-                    n = ingest(title, "url", text)
-                    st.session_state.source_name = title
-                    st.session_state.ingested    = True
-                    st.session_state.messages    = []
-                    if title not in st.session_state.all_sources:
-                        st.session_state.all_sources.append(title)
-                    st.success(f"{n} chunks indexed")
-                except Exception as e:
-                    st.error(str(e))
+        with tab_pdf:
+            pdf = st.file_uploader(
+                "PDF",
+                type=["pdf"],
+                label_visibility="collapsed"
+            )
+            if st.button("Index PDF", disabled=not pdf):
+                with st.spinner("reading · chunking · embedding"):
+                    try:
+                        title, text = extract_from_pdf(pdf.read(), pdf.name)
+                        n = ingest(title, "pdf", text)
+                        st.session_state.source_name = title
+                        st.session_state.ingested    = True
+                        st.session_state.messages    = []
+                        if title not in st.session_state.all_sources:
+                            st.session_state.all_sources.append(title)
+                        st.success(f"{n} chunks indexed")
+                    except Exception as e:
+                        st.error(str(e))
 
-    with tab_pdf:
-        pdf = st.file_uploader(
-            "PDF",
-            type=["pdf"],
-            label_visibility="collapsed"
-        )
-        if st.button("Index PDF", disabled=not pdf):
-            with st.spinner("reading · chunking · embedding"):
-                try:
-                    title, text = extract_from_pdf(pdf.read(), pdf.name)
-                    n = ingest(title, "pdf", text)
-                    st.session_state.source_name = title
-                    st.session_state.ingested    = True
-                    st.session_state.messages    = []
-                    if title not in st.session_state.all_sources:
-                        st.session_state.all_sources.append(title)
-                    st.success(f"{n} chunks indexed")
-                except Exception as e:
-                    st.error(str(e))
-
+    # ── Loaded documents section ──
     if st.session_state.ingested:
         st.markdown("---")
         st.markdown('<div class="section-label">Loaded</div>', unsafe_allow_html=True)
 
         for doc in st.session_state.all_sources:
             short = doc[:36] + "…" if len(doc) > 36 else doc
-            st.markdown(f'<div class="doc-pill">{short}</div>', unsafe_allow_html=True)
+            col1, col2 = st.columns([5, 1])
+            with col1:
+                st.markdown(f'<div class="doc-pill">{short}</div>', unsafe_allow_html=True)
+            with col2:
+                if st.button("×", key=f"del_{doc}", use_container_width=True):
+                    st.session_state.all_sources.remove(doc)
+                    if doc == st.session_state.source_name:
+                        st.session_state.source_name = None
+                        if st.session_state.all_sources:
+                            st.session_state.source_name = st.session_state.all_sources[0]
+                    st.rerun()
 
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown('<div class="section-label">Scope</div>', unsafe_allow_html=True)
@@ -504,12 +546,19 @@ with st.sidebar:
         )
 
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("Clear all"):
-            st.session_state.messages    = []
-            st.session_state.source_name = None
-            st.session_state.ingested    = False
-            st.session_state.all_sources = []
-            st.rerun()
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Clear all", use_container_width=True):
+                st.session_state.messages    = []
+                st.session_state.source_name = None
+                st.session_state.ingested    = False
+                st.session_state.all_sources = []
+                st.session_state.show_upload = True
+                st.rerun()
+        with col2:
+            if st.button("Logs", use_container_width=True):
+                st.session_state.show_logs = True
 
     # Footer
     st.markdown("<br>" * 4, unsafe_allow_html=True)
@@ -600,3 +649,29 @@ else:
             "content": response,
             "sources": srcs,
         })
+
+# ── Logs modal ────────────────────────────────────────────────────────────────
+if st.session_state.show_logs:
+    st.markdown("---")
+    st.markdown('<div class="section-label">Query Logs</div>', unsafe_allow_html=True)
+    
+    import json, os
+    if os.path.exists("query_log.json"):
+        with open("query_log.json") as f:
+            logs = json.load(f)
+        
+        st.markdown(f"**Total queries:** {len(logs)}")
+        
+        if logs:
+            # Show last 10 queries
+            for log in reversed(logs[-10:]):
+                timestamp = log.get("timestamp", "unknown")[:10]
+                query = log.get("query", "")[:50]
+                chunks = log.get("chunks_used", 0)
+                st.caption(f"📅 {timestamp} | {query}... | {chunks} chunks")
+            
+            if st.button("Close Logs"):
+                st.session_state.show_logs = False
+                st.rerun()
+    else:
+        st.info("No queries logged yet.")

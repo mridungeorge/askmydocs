@@ -20,7 +20,7 @@ app.add_middleware(
 
 # ── Static files (widget, example) ────────────────────────────────────────────
 if os.path.exists("frontend"):
-    app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
+    app.mount("/static", StaticFiles(directory="frontend"), name="frontend")
 
 # ── Request/Response models ───────────────────────────────────────────────────
 class ChatRequest(BaseModel):

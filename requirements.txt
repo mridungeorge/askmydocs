@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+streamlit
+qdrant-client
+openai
+python-dotenv
+requests
+beautifulsoup4
+langchain-text-splitters
+tiktoken
+pypdf
+rich

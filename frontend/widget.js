@@ -1,13 +1,5 @@
 (function() {
-    const API_URL = (function() {
-        // Get the script URL to infer the API base URL
-        const scripts = document.querySelectorAll('script[src*="widget.js"]');
-        if (scripts.length > 0) {
-            const src = scripts[0].src;
-            return src.substring(0, src.lastIndexOf('/'));
-        }
-        return window.location.origin;
-    })();
+    const API_URL = "https://askmydocs-production-a2bf.up.railway.app";
 
     function initWidget() {
         const container = document.getElementById('askmydocs-widget');

@@ -10,3 +10,5 @@ langchain-text-splitters
 tiktoken
 pypdf
 rich
+rank-bm25
+python-multipart

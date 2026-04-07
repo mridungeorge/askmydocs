@@ -197,6 +197,23 @@ input, textarea { font-family: var(--sans); }
   letter-spacing: 0.03em;
 }
 
+.file-list {
+  margin-top: 8px;
+  max-height: 120px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.file-list .file-name {
+  margin-top: 4px;
+  margin-bottom: 4px;
+  padding-left: 4px;
+  border-left: 2px solid var(--text-3);
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
 /* Divider */
 .divider {
   border: none;

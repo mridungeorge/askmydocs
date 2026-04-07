@@ -6,13 +6,14 @@ export default function Sidebar({
 }) {
   const [activeTab, setActiveTab] = useState('url')
   const [url, setUrl]             = useState('')
-  const [fileName, setFileName]   = useState('')
-  const [file, setFile]           = useState(null)
+  const [files, setFiles]         = useState([])
   const fileRef                   = useRef()
 
   const handleFileChange = (e) => {
-    const f = e.target.files[0]
-    if (f) { setFile(f); setFileName(f.name) }
+    const selectedFiles = Array.from(e.target.files)
+    if (selectedFiles.length > 0) {
+      setFiles(selectedFiles)
+    }
   }
 
   const handleUrlSubmit = () => {
@@ -22,10 +23,10 @@ export default function Sidebar({
   }
 
   const handlePdfSubmit = () => {
-    if (!file) return
-    onIngestPdf(file)
-    setFile(null)
-    setFileName('')
+    if (files.length === 0) return
+    onIngestPdf(files)
+    setFiles([])
+    fileRef.current.value = ''
   }
 
   return (
@@ -74,21 +75,26 @@ export default function Sidebar({
               ref={fileRef}
               type="file"
               accept=".pdf"
+              multiple
               onChange={handleFileChange}
             />
             <div className="file-drop-label">
-              {fileName ? '' : 'click to select PDF'}
+              {files.length === 0 ? 'click to select PDFs' : `${files.length} file${files.length > 1 ? 's' : ''} selected`}
             </div>
-            {fileName && (
-              <div className="file-name">{fileName}</div>
+            {files.length > 0 && (
+              <div className="file-list">
+                {files.map((f, i) => (
+                  <div key={i} className="file-name">{f.name}</div>
+                ))}
+              </div>
             )}
           </div>
           <button
             className="btn-primary"
             onClick={handlePdfSubmit}
-            disabled={!file || status?.type === 'loading'}
+            disabled={files.length === 0 || status?.type === 'loading'}
           >
-            Index PDF
+            Index {files.length > 0 ? `${files.length} PDF${files.length > 1 ? 's' : ''}` : 'PDFs'}
           </button>
         </>
       )}

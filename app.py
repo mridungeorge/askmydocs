@@ -432,12 +432,13 @@ with st.sidebar:
         st.session_state.source_filter = None if selected == "All documents" else selected
 
         st.markdown("<br>", unsafe_allow_html=True)
-
-        # Retrieval mode indicators
         st.markdown("""
-        <div class="retrieval-badge"><span class="badge-dot"></span>HyDE active</div>
-        <div class="retrieval-badge"><span class="badge-dot"></span>Hybrid search active</div>
-        <div class="retrieval-badge"><span class="badge-dot"></span>Conversation memory active</div>
+        <div class="badge-row">
+            <div class="badge"><span class="badge-dot"></span>HyDE active</div>
+            <div class="badge"><span class="badge-dot"></span>Hybrid search active</div>
+            <div class="badge"><span class="badge-dot"></span>LLM routing active</div>
+            <div class="badge"><span class="badge-dot"></span>Conversation memory</div>
+        </div>
         """, unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
@@ -470,7 +471,7 @@ if not st.session_state.ingested:
             <span class="sep">·</span>
             <span>Reranking</span>
             <span class="sep">·</span>
-            <span>Conversation memory</span>
+            <span>LLM routing</span>
         </div>
     </div>
     <div class="empty-state">
@@ -498,6 +499,10 @@ else:
                             f'</div>',
                             unsafe_allow_html=True,
                         )
+            if msg.get("routing"):
+                r = msg["routing"]
+                model_short = "70B" if "70b" in r.get("model","") else "8B"
+                st.caption(f"Model: {model_short} · complexity: {r.get('score', 0):.2f}")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -513,7 +518,12 @@ else:
                 # Pass full history for conversation memory
                 history = st.session_state.messages[:-1]  # exclude current question
                 chunks = retrieve(query, scope, history=history)
-                response, srcs = answer(query, chunks, history=history)
+                result = answer(query, chunks, history=history)
+                if len(result) == 3:
+                    response, srcs, routing = result
+                else:
+                    response, srcs = result
+                    routing = {}
 
             st.markdown(response)
             if srcs:
@@ -528,10 +538,16 @@ else:
                             f'</div>',
                             unsafe_allow_html=True,
                         )
+
+            if routing:
+                model_short = "70B" if "70b" in routing.get("model","") else "8B"
+                st.caption(f"Model: {model_short} · complexity: {routing.get('score',0):.2f}")
+
             log_query(query, scope, len(chunks), len(response))
 
         st.session_state.messages.append({
             "role":    "assistant",
             "content": response,
             "sources": srcs,
+            "routing": routing,
         })

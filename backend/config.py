@@ -3,23 +3,32 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# ── API keys ──────────────────────────────────────────────────────────────────
-NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY")
-QDRANT_URL = os.getenv("QDRANT_URL")
-QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
+# ── API Keys ──────────────────────────────────────────────────────────────────
+NVIDIA_API_KEY     = os.getenv("NVIDIA_API_KEY")
+QDRANT_URL         = os.getenv("QDRANT_URL")
+QDRANT_API_KEY     = os.getenv("QDRANT_API_KEY")
+SUPABASE_URL       = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
 
-# ── Models ────────────────────────────────────────────────────────────────────
-EMBED_MODEL = "nvidia/nv-embedqa-e5-v5"
-LLM_MODEL = "meta/llama-3.1-8b-instruct"
-RERANK_MODEL = "nvidia/rerank-qa-mistral-4b"
+# ── Embedding + Retrieval Models ──────────────────────────────────────────────
+EMBED_MODEL   = "nvidia/nv-embedqa-e5-v5"
+RERANK_MODEL  = "nvidia/rerank-qa-mistral-4b"
 
-# ── Retrieval settings ────────────────────────────────────────────────────────
-CHUNK_SIZE = 400
-CHUNK_OVERLAP = 40
-TOP_K_ANN = 20
-TOP_N_RERANK = 5
-COLLECTION_NAME = "askmydocs"
+# ── LLM Models — used for routing ────────────────────────────────────────────
+# Fast model: simple factual questions, short answers
+LLM_FAST      = "meta/llama-3.1-8b-instruct"
+# Powerful model: complex reasoning, comparisons, long answers
+LLM_POWERFUL  = "meta/llama-3.1-70b-instruct"
+# Default fallback
+LLM_MODEL     = LLM_FAST
 
-# ── NVIDIA base URL ───────────────────────────────────────────────────────────
+# ── Retrieval Settings ────────────────────────────────────────────────────────
+CHUNK_SIZE      = 400
+CHUNK_OVERLAP   = 40
+TOP_K_ANN       = 20
+TOP_N_RERANK    = 5
+COLLECTION_NAME = "askmydocs"  # base name — per-user: "askmydocs_user_{id}"
+
+# ── NVIDIA URLs ───────────────────────────────────────────────────────────────
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
-RERANK_URL = "https://ai.api.nvidia.com/v1/retrieval/nvidia/reranking"
+RERANK_URL      = "https://ai.api.nvidia.com/v1/retrieval/nvidia/reranking"

@@ -1,19 +1,18 @@
 import { useState, useRef } from 'react'
 
 export default function Sidebar({
-  ingested, allSources, scope, status,
-  onIngestUrl, onIngestPdf, onScopeChange, onClear,
+  ingested, allSources, scope, status, user,
+  onIngestUrl, onIngestPdf, onScopeChange, onClear, onSignOut,
 }) {
   const [activeTab, setActiveTab] = useState('url')
   const [url, setUrl]             = useState('')
-  const [files, setFiles]         = useState([])
+  const [fileName, setFileName]   = useState('')
+  const [file, setFile]           = useState(null)
   const fileRef                   = useRef()
 
   const handleFileChange = (e) => {
-    const selectedFiles = Array.from(e.target.files)
-    if (selectedFiles.length > 0) {
-      setFiles(selectedFiles)
-    }
+    const f = e.target.files[0]
+    if (f) { setFile(f); setFileName(f.name) }
   }
 
   const handleUrlSubmit = () => {
@@ -23,26 +22,54 @@ export default function Sidebar({
   }
 
   const handlePdfSubmit = () => {
-    if (files.length === 0) return
-    onIngestPdf(files)
-    setFiles([])
-    fileRef.current.value = ''
+    if (!file) return
+    onIngestPdf(file)
+    setFile(null)
+    setFileName('')
   }
 
   return (
     <aside className="sidebar">
+      {/* User info */}
+      <div style={{
+        marginBottom: 32,
+        paddingBottom: 20,
+        borderBottom: '1px solid #e8e8e4',
+      }}>
+        <div style={{
+          fontSize: 11,
+          fontWeight: 300,
+          color: '#aaa',
+          letterSpacing: '0.1em',
+          marginBottom: 4,
+        }}>
+          {user?.email || 'User'}
+        </div>
+        <button
+          onClick={onSignOut}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            fontSize: 10,
+            fontFamily: "'Noto Sans JP', sans-serif",
+            fontWeight: 300,
+            color: '#ccc',
+            letterSpacing: '0.15em',
+            textTransform: 'uppercase',
+            cursor: 'pointer',
+            padding: 0,
+          }}
+        >
+          Sign out
+        </button>
+      </div>
+
       <div className="sidebar-mark">Document</div>
       <div className="section-label">Load source</div>
 
       <div className="tabs">
-        <button
-          className={`tab ${activeTab === 'url' ? 'active' : ''}`}
-          onClick={() => setActiveTab('url')}
-        >URL</button>
-        <button
-          className={`tab ${activeTab === 'pdf' ? 'active' : ''}`}
-          onClick={() => setActiveTab('pdf')}
-        >PDF</button>
+        <button className={`tab ${activeTab === 'url' ? 'active' : ''}`} onClick={() => setActiveTab('url')}>URL</button>
+        <button className={`tab ${activeTab === 'pdf' ? 'active' : ''}`} onClick={() => setActiveTab('pdf')}>PDF</button>
       </div>
 
       {activeTab === 'url' && (
@@ -55,11 +82,7 @@ export default function Sidebar({
             onChange={e => setUrl(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleUrlSubmit()}
           />
-          <button
-            className="btn-primary"
-            onClick={handleUrlSubmit}
-            disabled={!url.trim() || status?.type === 'loading'}
-          >
+          <button className="btn-primary" onClick={handleUrlSubmit} disabled={!url.trim() || status?.type === 'loading'}>
             Index URL
           </button>
         </>
@@ -67,42 +90,19 @@ export default function Sidebar({
 
       {activeTab === 'pdf' && (
         <>
-          <div
-            className="file-drop"
-            onClick={() => fileRef.current?.click()}
-          >
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".pdf"
-              multiple
-              onChange={handleFileChange}
-            />
-            <div className="file-drop-label">
-              {files.length === 0 ? 'click to select PDFs' : `${files.length} file${files.length > 1 ? 's' : ''} selected`}
-            </div>
-            {files.length > 0 && (
-              <div className="file-list">
-                {files.map((f, i) => (
-                  <div key={i} className="file-name">{f.name}</div>
-                ))}
-              </div>
-            )}
+          <div className="file-drop" onClick={() => fileRef.current?.click()}>
+            <input ref={fileRef} type="file" accept=".pdf" onChange={handleFileChange} />
+            <div className="file-drop-label">{fileName ? '' : 'click to select PDF'}</div>
+            {fileName && <div className="file-name">{fileName}</div>}
           </div>
-          <button
-            className="btn-primary"
-            onClick={handlePdfSubmit}
-            disabled={files.length === 0 || status?.type === 'loading'}
-          >
-            Index {files.length > 0 ? `${files.length} PDF${files.length > 1 ? 's' : ''}` : 'PDFs'}
+          <button className="btn-primary" onClick={handlePdfSubmit} disabled={!file || status?.type === 'loading'}>
+            Index PDF
           </button>
         </>
       )}
 
       {status && (
-        <div className={`status ${status.type}`}>
-          {status.text}
-        </div>
+        <div className={`status ${status.type}`}>{status.text}</div>
       )}
 
       {ingested && (
@@ -131,12 +131,11 @@ export default function Sidebar({
           <div className="badge-row">
             <div className="badge"><span className="badge-dot" />HyDE active</div>
             <div className="badge"><span className="badge-dot" />Hybrid search active</div>
+            <div className="badge"><span className="badge-dot" />LLM routing active</div>
             <div className="badge"><span className="badge-dot" />Conversation memory</div>
           </div>
 
-          <button className="btn-ghost" onClick={onClear}>
-            Clear all
-          </button>
+          <button className="btn-ghost" onClick={onClear}>Clear all</button>
         </>
       )}
 

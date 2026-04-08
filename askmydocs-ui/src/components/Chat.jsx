@@ -17,6 +17,7 @@ export default function Chat({ messages, loading }) {
             role={msg.role}
             content={msg.content}
             sources={msg.sources}
+            routing={msg.routing}
           />
         ))}
 

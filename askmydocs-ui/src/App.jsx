@@ -1,15 +1,57 @@
-import Sidebar from './components/Sidebar'
-import Chat    from './components/Chat'
-import Input   from './components/Input'
-import { useChat } from './hooks/useChat'
+import { useChat, useAuth } from './hooks/useChat'
+import Sidebar   from './components/Sidebar'
+import Chat      from './components/Chat'
+import Input     from './components/Input'
+import AuthPage  from './components/AuthPage'
 import './index.css'
 
 export default function App() {
+  const {
+    user, loading: authLoading,
+    signInWithGoogle, signInWithEmail,
+    signUpWithEmail, signInWithPhone,
+    verifyOtp, signOut,
+  } = useAuth()
+
   const {
     messages, loading, allSources, scope, ingested, status,
     setScope, ingestUrl, ingestPdf, sendMessage, clearAll,
   } = useChat()
 
+  // Show loading spinner while checking auth
+  if (authLoading) {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: '#fafaf8',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontFamily: "'Noto Serif', serif",
+        fontSize: 13,
+        color: '#aaa',
+        fontStyle: 'italic',
+        letterSpacing: '0.05em',
+      }}>
+        loading…
+      </div>
+    )
+  }
+
+  // Show auth page if not logged in
+  if (!user) {
+    return (
+      <AuthPage
+        onSignInGoogle={signInWithGoogle}
+        onSignInEmail={signInWithEmail}
+        onSignUp={signUpWithEmail}
+        onSignInPhone={signInWithPhone}
+        onVerifyOtp={verifyOtp}
+      />
+    )
+  }
+
+  // Main app
   return (
     <div className="app">
       <Sidebar
@@ -17,10 +59,12 @@ export default function App() {
         allSources={allSources}
         scope={scope}
         status={status}
+        user={user}
         onIngestUrl={ingestUrl}
         onIngestPdf={ingestPdf}
         onScopeChange={setScope}
         onClear={clearAll}
+        onSignOut={signOut}
       />
 
       <main className="main">
@@ -33,8 +77,8 @@ export default function App() {
                 <em>Get cited answers.</em>
               </div>
               <div className="hero-sub">
-                Load any PDF or public URL from the sidebar.<br />
-                Ask questions. Every answer is cited.
+                Welcome, {user.email?.split('@')[0]}.<br />
+                Load any PDF or public URL from the sidebar.
               </div>
               <div className="hero-pipeline">
                 <strong>HyDE</strong>
@@ -43,7 +87,7 @@ export default function App() {
                 <span className="sep">·</span>
                 <strong>Reranking</strong>
                 <span className="sep">·</span>
-                <strong>Conversation memory</strong>
+                <strong>LLM routing</strong>
               </div>
             </div>
             <div className="empty">

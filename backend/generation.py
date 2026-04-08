@@ -1,7 +1,14 @@
+"""
+Generation with LLM routing.
+Every call to answer() now:
+1. Routes to fast or powerful model based on query complexity
+2. Includes conversation history for memory
+3. Returns which model was used (shown in UI)
+"""
+
 from openai import OpenAI
-from backend.config import (
-    NVIDIA_API_KEY, NVIDIA_BASE_URL, LLM_MODEL
-)
+from backend.config import NVIDIA_API_KEY, NVIDIA_BASE_URL
+from backend.router import select_model
 
 nvidia = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
 
@@ -14,7 +21,6 @@ Keep answers clear and well-structured."""
 
 
 def format_context(chunks: list) -> str:
-    """Format retrieved chunks into a numbered context block for the LLM."""
     parts = []
     for i, chunk in enumerate(chunks):
         parts.append(
@@ -25,71 +31,66 @@ def format_context(chunks: list) -> str:
 
 
 def format_history(history: list[dict], max_exchanges: int = 3) -> list[dict]:
-    """
-    Convert conversation history to OpenAI message format.
-    Limits to last N exchanges to avoid hitting context limits.
-    """
     if not history:
         return []
     recent = history[-(max_exchanges * 2):]
-    messages = []
-    for msg in recent:
-        if msg["role"] in ("user", "assistant"):
-            messages.append({
-                "role": msg["role"],
-                "content": msg["content"],
-            })
-    return messages
+    return [
+        {"role": m["role"], "content": m["content"]}
+        for m in recent
+        if m["role"] in ("user", "assistant")
+    ]
 
 
 def generate(
     query: str,
     chunks: list,
     history: list[dict] = None,
-) -> str:
+) -> tuple[str, str, float]:
     """
-    Generate an answer from retrieved chunks.
-    Includes conversation history so the LLM has full context.
+    Generate answer. Returns (answer_text, model_used, complexity_score).
     """
     if not chunks:
-        return "I couldn't find relevant information to answer your question."
+        return (
+            "I couldn't find relevant information to answer your question.",
+            "none",
+            0.0,
+        )
 
     history = history or []
-    context = format_context(chunks)
+
+    # Route to appropriate model
+    model, reason, score = select_model(query, history)
+
+    context          = format_context(chunks)
     history_messages = format_history(history)
 
-    # Build message chain:
-    # system → [conversation history] → current question with context
     messages = (
         [{"role": "system", "content": SYSTEM_PROMPT}]
         + history_messages
-        + [
-            {
-                "role": "user",
-                "content": f"Context:\n{context}\n\nQuestion: {query}",
-            }
-        ]
+        + [{"role": "user", "content": f"Context:\n{context}\n\nQuestion: {query}"}]
     )
 
     response = nvidia.chat.completions.create(
-        model=LLM_MODEL,
+        model=model,
         messages=messages,
         max_tokens=600,
         temperature=0.2,
     )
-    return response.choices[0].message.content
+
+    return response.choices[0].message.content, model, score
 
 
 def answer(
     query: str,
     chunks: list,
     history: list[dict] = None,
-) -> tuple[str, list[dict]]:
+) -> tuple[str, list[dict], dict]:
     """
-    Returns (answer_text, sources_list).
-    Sources include name, type, snippet, and confidence score.
+    Returns (answer_text, sources_list, routing_info).
+    routing_info contains which model was used and why.
     """
-    text = generate(query, chunks, history)
+    text, model_used, score = generate(query, chunks, history)
+
     sources = [
         {
             "name":    c.payload["source_name"],
@@ -99,4 +100,11 @@ def answer(
         }
         for c in chunks
     ]
-    return text, sources
+
+    routing_info = {
+        "model":      model_used,
+        "score":      round(score, 3),
+        "is_complex": score >= 0.4,
+    }
+
+    return text, sources, routing_info

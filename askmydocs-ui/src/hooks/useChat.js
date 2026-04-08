@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import axios from 'axios'
 
+// Multi-document support enabled: add multiple PDFs/URLs via sidebar
 const API_URL    = import.meta.env.VITE_API_URL    || 'https://askmydocs-production-a2bf.up.railway.app'
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY

@@ -11,12 +11,29 @@ from backend.config import (
     NVIDIA_BASE_URL, LLM_FAST,
 )
 
-nvidia = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
-qdrant = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+# Lazy initialization - only create clients when API keys are available
+nvidia = None
+qdrant = None
+
+def get_nvidia_client():
+    global nvidia
+    if nvidia is None:
+        if not NVIDIA_API_KEY:
+            raise ValueError("NVIDIA_API_KEY not set. Check environment variables.")
+        nvidia = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
+    return nvidia
+
+def get_qdrant_client():
+    global qdrant
+    if qdrant is None:
+        if not QDRANT_URL or not QDRANT_API_KEY:
+            raise ValueError("QDRANT_URL or QDRANT_API_KEY not set. Check environment variables.")
+        qdrant = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+    return qdrant
 
 
 def embed_query(query: str) -> list[float]:
-    response = nvidia.embeddings.create(
+    response = get_nvidia_client().embeddings.create(
         model=EMBED_MODEL, input=query,
         encoding_format="float",
         extra_body={"input_type": "query", "truncate": "END"},
@@ -25,7 +42,7 @@ def embed_query(query: str) -> list[float]:
 
 
 def embed_passage(text: str) -> list[float]:
-    response = nvidia.embeddings.create(
+    response = get_nvidia_client().embeddings.create(
         model=EMBED_MODEL, input=text,
         encoding_format="float",
         extra_body={"input_type": "passage", "truncate": "END"},
@@ -34,8 +51,7 @@ def embed_passage(text: str) -> list[float]:
 
 
 def generate_hypothetical_answer(query: str) -> str:
-    from openai import OpenAI
-    client = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
+    client = get_nvidia_client()
     response = client.chat.completions.create(
         model=LLM_FAST,
         messages=[
@@ -66,7 +82,7 @@ def ann_search(
         filter_ = Filter(must=[
             FieldCondition(key="source_name", match=MatchValue(value=source_name))
         ])
-    return qdrant.query_points(
+    return get_qdrant_client().query_points(
         collection_name=collection_name,
         query=query_vector,
         limit=top_k,

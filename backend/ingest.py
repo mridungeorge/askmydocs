@@ -14,8 +14,26 @@ from backend.config import (
     CHUNK_SIZE, CHUNK_OVERLAP, COLLECTION_NAME,
 )
 
-nvidia   = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
-qdrant   = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+# Lazy initialization - only create clients when API keys are available
+nvidia   = None
+qdrant   = None
+
+def get_nvidia_client():
+    global nvidia
+    if nvidia is None:
+        if not NVIDIA_API_KEY:
+            raise ValueError("NVIDIA_API_KEY not set. Check environment variables.")
+        nvidia = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
+    return nvidia
+
+def get_qdrant_client():
+    global qdrant
+    if qdrant is None:
+        if not QDRANT_URL or not QDRANT_API_KEY:
+            raise ValueError("QDRANT_URL or QDRANT_API_KEY not set. Check environment variables.")
+        qdrant = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+    return qdrant
+
 enc      = tiktoken.get_encoding("cl100k_base")
 splitter = RecursiveCharacterTextSplitter(
     chunk_size=CHUNK_SIZE,
@@ -76,7 +94,7 @@ def make_chunks(source_name: str, source_type: str, text: str) -> list[Chunk]:
 
 
 def embed_passages(texts: list[str]) -> list[list[float]]:
-    response = nvidia.embeddings.create(
+    response = get_nvidia_client().embeddings.create(
         model=EMBED_MODEL, input=texts,
         encoding_format="float",
         extra_body={"input_type": "passage", "truncate": "END"},
@@ -85,13 +103,14 @@ def embed_passages(texts: list[str]) -> list[list[float]]:
 
 
 def ensure_collection(vector_size: int, collection_name: str):
-    existing = [c.name for c in qdrant.get_collections().collections]
+    client = get_qdrant_client()
+    existing = [c.name for c in client.get_collections().collections]
     if collection_name not in existing:
-        qdrant.create_collection(
+        client.create_collection(
             collection_name=collection_name,
             vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE),
         )
-    qdrant.create_payload_index(
+    client.create_payload_index(
         collection_name=collection_name,
         field_name="source_name",
         field_schema="keyword",
@@ -139,5 +158,5 @@ def ingest(
         for i, (c, vector) in enumerate(zip(chunks, all_vectors))
     ]
 
-    qdrant.upsert(collection_name=collection_name, points=points)
+    get_qdrant_client().upsert(collection_name=collection_name, points=points)
     return len(chunks)

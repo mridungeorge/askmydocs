@@ -19,5 +19,19 @@
     "source": "2005.11401v4.pdf",
     "chunks_used": 5,
     "answer_chars": 1887
+  },
+  {
+    "timestamp": "2026-04-08T11:04:55.226860",
+    "query": "rag",
+    "source": "2005.11401v4.pdf",
+    "chunks_used": 5,
+    "answer_chars": 274
+  },
+  {
+    "timestamp": "2026-04-08T11:15:05.308448",
+    "query": "rag",
+    "source": "2005.11401v4.pdf",
+    "chunks_used": 5,
+    "answer_chars": 548
   }
 ]

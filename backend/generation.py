@@ -10,7 +10,16 @@ from openai import OpenAI
 from backend.config import NVIDIA_API_KEY, NVIDIA_BASE_URL
 from backend.router import select_model
 
-nvidia = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
+# Lazy initialization - only create client when API key is available
+nvidia = None
+
+def get_nvidia_client():
+    global nvidia
+    if nvidia is None:
+        if not NVIDIA_API_KEY:
+            raise ValueError("NVIDIA_API_KEY not set. Check environment variables.")
+        nvidia = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
+    return nvidia
 
 SYSTEM_PROMPT = """You are a precise document assistant.
 Answer using ONLY the provided context.
@@ -70,7 +79,7 @@ def generate(
         + [{"role": "user", "content": f"Context:\n{context}\n\nQuestion: {query}"}]
     )
 
-    response = nvidia.chat.completions.create(
+    response = get_nvidia_client().chat.completions.create(
         model=model,
         messages=messages,
         max_tokens=600,

@@ -141,17 +141,17 @@ export default function App() {
               <div className="empty-text">No document loaded.</div>
               <div className="empty-actions">
                 <p style={{fontSize: '12px', color: '#888', lineHeight: '1.6', margin: 0}}>
-                  👉 Use the button below or open the sidebar menu (top-left on mobile) to load a PDF or URL
+                  � Use the sidebar on the left (or the menu button) to load a PDF or URL
                 </p>
                 <button 
-                  className="empty-btn empty-btn-primary"
+                  className="empty-btn empty-btn-primary empty-btn-mobile"
                   onClick={() => setSidebarOpen(true)}
-                  title="Open sidebar to load a document"
+                  title="Open sidebar menu to load a document"
                 >
                   <svg viewBox="0 0 24 24" fill="currentColor" strokeWidth="0">
                     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
                   </svg>
-                  Open sidebar to load document
+                  Open sidebar menu
                 </button>
               </div>
             </div>

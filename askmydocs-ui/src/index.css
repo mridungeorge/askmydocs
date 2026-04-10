@@ -480,6 +480,16 @@ input, textarea { font-family: var(--sans); }
   background: var(--text-2);
   border-color: var(--text-2);
 }
+.empty-btn-mobile {
+  display: none;
+}
+
+/* Show button only on mobile */
+@media (max-width: 768px) {
+  .empty-btn-mobile {
+    display: flex !important;
+  }
+}
 
 /* Chat thread */
 .chat-thread {

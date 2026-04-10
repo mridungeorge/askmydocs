@@ -8,7 +8,7 @@ st.set_page_config(
     page_title="AskMyDocs",
     page_icon="◻",
     layout="centered",
-    initial_sidebar_state="auto",
+    initial_sidebar_state="collapsed",
 )
 
 st.markdown("""
@@ -27,9 +27,14 @@ html, body, [data-testid="stAppViewContainer"] {
     margin-top: 0 !important;
 }
 
-#MainMenu, footer, header,
+#MainMenu, footer,
 [data-testid="stDecoration"],
 [data-testid="stStatusWidget"] { display: none !important; }
+
+/* Hide header on desktop only, keep it on mobile for sidebar toggle */
+@media (min-width: 769px) {
+    header { display: none !important; }
+}
 
 /* Show Streamlit toolbar for sidebar toggle button */
 [data-testid="stToolbar"] {
@@ -422,6 +427,24 @@ hr {
 
 /* Mobile (768px and below) */
 @media (max-width: 768px) {
+    /* Shrink header and show only sidebar toggle */
+    header {
+        background: transparent !important;
+        height: 44px !important;
+        min-height: 44px !important;
+    }
+    header > * {
+        background: transparent !important;
+    }
+    /* Hide everything in header EXCEPT the sidebar toggle button */
+    header [data-testid="stToolbar"] > *:not(:first-child) {
+        display: none !important;
+    }
+
+    [data-testid="stAppViewContainer"] > section:first-child {
+        padding-top: 44px !important;
+    }
+
     [data-testid="stToolbar"] {
         display: flex !important;
         position: fixed !important;
@@ -429,12 +452,12 @@ hr {
         left: 0 !important;
         z-index: 999 !important;
         background: transparent !important;
-        min-height: 40px !important;
+        min-height: 44px !important;
     }
 
     [data-testid="stToolbar"] button {
-        min-width: 40px !important;
-        min-height: 40px !important;
+        min-width: 44px !important;
+        min-height: 44px !important;
         padding: 8px !important;
     }
 
@@ -464,6 +487,7 @@ hr {
 
     .hero {
         padding: 32px 20px 24px;
+        padding-top: 52px !important;
     }
     .hero-eyebrow {
         font-size: 9px;
@@ -581,6 +605,22 @@ hr {
 
 /* Small Mobile (480px and below) */
 @media (max-width: 480px) {
+    header {
+        background: transparent !important;
+        height: 40px !important;
+        min-height: 40px !important;
+    }
+    header > * {
+        background: transparent !important;
+    }
+    header [data-testid="stToolbar"] > *:not(:first-child) {
+        display: none !important;
+    }
+
+    [data-testid="stAppViewContainer"] > section:first-child {
+        padding-top: 40px !important;
+    }
+
     [data-testid="stToolbar"] {
         display: flex !important;
         position: fixed !important;
@@ -588,12 +628,12 @@ hr {
         left: 0 !important;
         z-index: 999 !important;
         background: transparent !important;
-        min-height: 36px !important;
+        min-height: 40px !important;
     }
 
     [data-testid="stToolbar"] button {
-        min-width: 36px !important;
-        min-height: 36px !important;
+        min-width: 40px !important;
+        min-height: 40px !important;
         padding: 6px !important;
     }
 

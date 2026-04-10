@@ -29,7 +29,7 @@ export default function Sidebar({
   }
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar-inner">
       {/* User info */}
       <div style={{
         marginBottom: 32,

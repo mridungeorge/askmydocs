@@ -67,6 +67,16 @@ input, textarea { font-family: var(--sans); }
   transition: transform 0.25s ease;
 }
 
+/* Inner sidebar content wrapper */
+.sidebar-inner {
+  padding: 32px 24px;
+  height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
 /* Main content */
 .main {
   flex: 1;

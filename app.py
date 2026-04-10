@@ -24,12 +24,22 @@ html, body, [data-testid="stAppViewContainer"] {
 [data-testid="stAppViewContainer"] {
     font-family: 'Noto Sans JP', sans-serif !important;
     font-weight: 300 !important;
+    margin-top: 0 !important;
 }
 
 #MainMenu, footer, header,
-[data-testid="stToolbar"],
 [data-testid="stDecoration"],
 [data-testid="stStatusWidget"] { display: none !important; }
+
+/* Show Streamlit toolbar for sidebar toggle button */
+[data-testid="stToolbar"] {
+    display: flex !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    z-index: 999 !important;
+    background: transparent !important;
+}
 
 [data-testid="stSidebar"] {
     background: #f2f2ee !important;
@@ -172,7 +182,7 @@ hr {
     background: #fafaf8 !important;
 }
 
-.block-container { padding: 0 !important; max-width: 100% !important; }
+.block-container { padding: 0 !important; max-width: 100% !important; padding-top: 0 !important; }
 
 .hero {
     padding: 72px 72px 52px;
@@ -398,12 +408,34 @@ hr {
 
 /* Mobile (768px and below) */
 @media (max-width: 768px) {
+    [data-testid="stToolbar"] {
+        display: flex !important;
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        z-index: 999 !important;
+        background: transparent !important;
+        min-height: 40px !important;
+    }
+
+    [data-testid="stToolbar"] button {
+        min-width: 40px !important;
+        min-height: 40px !important;
+        padding: 8px !important;
+    }
+
     [data-testid="stSidebar"] {
         min-width: 250px !important;
         max-width: 250px !important;
+        margin-top: 0 !important;
     }
     [data-testid="stSidebar"] > div {
-        padding: 24px 16px !important;
+        padding: 60px 16px 24px !important;
+    }
+
+    .hero {
+        padding: 52px 20px 24px;
+        margin-top: 0 !important;
     }
 
     .sidebar-mark {
@@ -530,12 +562,28 @@ hr {
 
 /* Small Mobile (480px and below) */
 @media (max-width: 480px) {
+    [data-testid="stToolbar"] {
+        display: flex !important;
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        z-index: 999 !important;
+        background: transparent !important;
+        min-height: 36px !important;
+    }
+
+    [data-testid="stToolbar"] button {
+        min-width: 36px !important;
+        min-height: 36px !important;
+        padding: 6px !important;
+    }
+
     [data-testid="stSidebar"] {
         min-width: 220px !important;
         max-width: 220px !important;
     }
     [data-testid="stSidebar"] > div {
-        padding: 20px 12px !important;
+        padding: 50px 12px 20px !important;
     }
 
     .sidebar-mark {

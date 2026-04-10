@@ -85,15 +85,18 @@ export default function App() {
           scope={scope}
           status={status}
           user={user}
-          onIngestUrl={() => {
-            ingestUrl.apply(this, arguments)
+          onIngestUrl={(url) => {
+            ingestUrl(url)
             setSidebarOpen(false)
           }}
-          onIngestPdf={() => {
-            ingestPdf.apply(this, arguments)
+          onIngestPdf={(file) => {
+            ingestPdf(file)
             setSidebarOpen(false)
           }}
-          onScopeChange={setScope}
+          onScopeChange={(newScope) => {
+            setScope(newScope)
+            setSidebarOpen(false)
+          }}
           onClear={() => {
             clearAll()
             setSidebarOpen(false)

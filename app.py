@@ -470,6 +470,7 @@ hr {
         min-width: 250px !important;
         max-width: 250px !important;
         margin-top: 0 !important;
+        z-index: 5 !important;
     }
     [data-testid="stSidebar"] > div {
         padding: 60px 16px 24px !important;
@@ -531,8 +532,9 @@ hr {
     }
 
     .chat-area {
-        padding: 16px 12px;
+        padding: 16px 12px 80px;
         max-width: 100%;
+        min-height: calc(100vh - 100px);
     }
 
     [data-testid="stChatMessage"] {
@@ -709,6 +711,9 @@ hr {
 
     [data-testid="stChatInput"] {
         padding: 10px 6px !important;
+        position: relative !important;
+        z-index: 10 !important;
+        bottom: 0 !important;
     }
     [data-testid="stChatInput"] textarea {
         font-size: 12px !important;

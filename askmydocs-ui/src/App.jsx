@@ -132,9 +132,25 @@ export default function App() {
               </div>
             </div>
             <div className="empty">
-              <div className="empty-mark" />
+              <div className="empty-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+                  <polyline points="13 2 13 9 20 9" />
+                </svg>
+              </div>
               <div className="empty-text">No document loaded.</div>
-              <div className="empty-hint">← load a source to begin</div>
+              <div className="empty-hint">
+                <button 
+                  className="empty-btn"
+                  onClick={() => setSidebarOpen(true)}
+                  title="Click to load a document"
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" strokeWidth="0">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
+                  </svg>
+                  Click to load a source
+                </button>
+              </div>
             </div>
           </>
         ) : (

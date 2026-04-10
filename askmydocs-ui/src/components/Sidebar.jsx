@@ -83,7 +83,22 @@ export default function Sidebar({
             onKeyDown={e => e.key === 'Enter' && handleUrlSubmit()}
           />
           <button className="btn-primary" onClick={handleUrlSubmit} disabled={!url.trim() || status?.type === 'loading'}>
-            Index URL
+            {status?.type === 'loading' ? (
+              <>
+                <svg className="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 6v6l4 2" strokeLinecap="round" />
+                </svg>
+                Processing…
+              </>
+            ) : (
+              <>
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
+                </svg>
+                Index URL
+              </>
+            )}
           </button>
         </>
       )}
@@ -92,11 +107,31 @@ export default function Sidebar({
         <>
           <div className="file-drop" onClick={() => fileRef.current?.click()}>
             <input ref={fileRef} type="file" accept=".pdf" onChange={handleFileChange} />
-            <div className="file-drop-label">{fileName ? '' : 'click to select PDF'}</div>
+            <div className="file-drop-icon">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+              </svg>
+            </div>
+            <div className="file-drop-label">{fileName ? 'PDF selected' : 'Click to select PDF'}</div>
             {fileName && <div className="file-name">{fileName}</div>}
           </div>
           <button className="btn-primary" onClick={handlePdfSubmit} disabled={!file || status?.type === 'loading'}>
-            Index PDF
+            {status?.type === 'loading' ? (
+              <>
+                <svg className="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 6v6l4 2" strokeLinecap="round" />
+                </svg>
+                Processing…
+              </>
+            ) : (
+              <>
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
+                </svg>
+                Index PDF
+              </>
+            )}
           </button>
         </>
       )}

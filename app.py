@@ -235,6 +235,20 @@ hr {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    align-items: flex-start;
+}
+.empty-icon {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #aaa;
+    margin-bottom: 8px;
+}
+.empty-icon svg {
+    width: 100%;
+    height: 100%;
 }
 .empty-mark {
     width: 32px;
@@ -475,6 +489,11 @@ hr {
         padding: 40px 20px;
         gap: 8px;
     }
+    .empty-icon {
+        width: 40px;
+        height: 40px;
+        margin-bottom: 6px;
+    }
     .empty-text {
         font-size: 15px;
     }
@@ -619,6 +638,11 @@ hr {
 
     .empty-state {
         padding: 32px 12px;
+    }
+    .empty-icon {
+        width: 36px;
+        height: 36px;
+        margin-bottom: 4px;
     }
     .empty-text {
         font-size: 14px;
@@ -805,9 +829,14 @@ if not st.session_state.ingested:
         </div>
     </div>
     <div class="empty-state">
-        <div class="empty-mark"></div>
+        <div class="empty-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path>
+                <polyline points="13 2 13 9 20 9"></polyline>
+            </svg>
+        </div>
         <div class="empty-text">No document loaded.</div>
-        <div class="empty-hint">← load a source to begin</div>
+        <div class="empty-hint">📄 Load a PDF or URL from the sidebar →</div>
     </div>
     """, unsafe_allow_html=True)
 

@@ -8,7 +8,7 @@ st.set_page_config(
     page_title="AskMyDocs",
     page_icon="◻",
     layout="centered",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 st.markdown("""
@@ -34,6 +34,11 @@ html, body, [data-testid="stAppViewContainer"] {
 /* Hide header on desktop only, keep it on mobile for sidebar toggle */
 @media (min-width: 769px) {
     header { display: none !important; }
+    /* But keep the collapsed control visible for sidebar toggle */
+    [data-testid="collapsedControl"] {
+        display: flex !important;
+        visibility: visible !important;
+    }
 }
 
 /* Show Streamlit toolbar for sidebar toggle button */

@@ -69,12 +69,13 @@ input, textarea { font-family: var(--sans); }
 
 /* Inner sidebar content wrapper */
 .sidebar-inner {
-  padding: 32px 24px;
-  height: 100%;
-  overflow-y: auto;
+  padding: 0;
+  height: auto;
+  overflow-y: visible;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  flex: 1;
 }
 
 /* Main content */

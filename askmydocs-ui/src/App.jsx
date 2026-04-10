@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useChat, useAuth } from './hooks/useChat'
 import Sidebar   from './components/Sidebar'
 import Chat      from './components/Chat'
@@ -6,6 +7,8 @@ import AuthPage  from './components/AuthPage'
 import './index.css'
 
 export default function App() {
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
   const {
     user, loading: authLoading,
     signInWithGoogle, signInWithEmail,
@@ -54,18 +57,53 @@ export default function App() {
   // Main app
   return (
     <div className="app">
-      <Sidebar
-        ingested={ingested}
-        allSources={allSources}
-        scope={scope}
-        status={status}
-        user={user}
-        onIngestUrl={ingestUrl}
-        onIngestPdf={ingestPdf}
-        onScopeChange={setScope}
-        onClear={clearAll}
-        onSignOut={signOut}
+      {/* Mobile menu button */}
+      <button
+        className="mobile-menu-btn"
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        aria-label="Toggle menu"
+      >
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          {sidebarOpen ? (
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          ) : (
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          )}
+        </svg>
+      </button>
+
+      {/* Sidebar overlay (mobile) */}
+      <div
+        className={`sidebar-overlay ${sidebarOpen ? 'active' : ''}`}
+        onClick={() => setSidebarOpen(false)}
       />
+
+      <div className={`sidebar ${sidebarOpen ? 'active' : ''}`}>
+        <Sidebar
+          ingested={ingested}
+          allSources={allSources}
+          scope={scope}
+          status={status}
+          user={user}
+          onIngestUrl={() => {
+            ingestUrl.apply(this, arguments)
+            setSidebarOpen(false)
+          }}
+          onIngestPdf={() => {
+            ingestPdf.apply(this, arguments)
+            setSidebarOpen(false)
+          }}
+          onScopeChange={setScope}
+          onClear={() => {
+            clearAll()
+            setSidebarOpen(false)
+          }}
+          onSignOut={() => {
+            signOut()
+            setSidebarOpen(false)
+          }}
+        />
+      </div>
 
       <main className="main">
         {!ingested ? (

@@ -7,8 +7,8 @@ from backend.logger import log_query
 st.set_page_config(
     page_title="AskMyDocs",
     page_icon="◻",
-    layout="wide",
-    initial_sidebar_state="expanded",
+    layout="centered",
+    initial_sidebar_state="auto",
 )
 
 st.markdown("""
@@ -361,6 +361,288 @@ hr {
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #d8d8d2; }
+
+/* ─── Mobile Responsive ─────────────────────────────────────────────────────── */
+
+/* Tablet (768px and below) */
+@media (max-width: 1024px) {
+    [data-testid="stSidebar"] > div {
+        padding: 32px 20px !important;
+    }
+
+    .hero {
+        padding: 48px 40px 36px;
+    }
+    .hero-title {
+        font-size: 36px;
+        margin-bottom: 12px;
+    }
+
+    .empty-state {
+        padding: 60px 40px;
+    }
+
+    .chat-area {
+        padding: 32px 40px;
+    }
+
+    [data-testid="stChatInput"] {
+        padding: 12px 40px !important;
+    }
+
+    [data-testid="stTabs"] [role="tab"] {
+        font-size: 10px !important;
+        padding: 6px 12px 6px 0 !important;
+    }
+}
+
+/* Mobile (768px and below) */
+@media (max-width: 768px) {
+    [data-testid="stSidebar"] {
+        min-width: 250px !important;
+        max-width: 250px !important;
+    }
+    [data-testid="stSidebar"] > div {
+        padding: 24px 16px !important;
+    }
+
+    .sidebar-mark {
+        font-size: 10px;
+        margin-bottom: 20px;
+    }
+
+    .section-label {
+        font-size: 9px;
+        margin-bottom: 8px;
+    }
+
+    .hero {
+        padding: 32px 20px 24px;
+    }
+    .hero-eyebrow {
+        font-size: 9px;
+        margin-bottom: 12px;
+    }
+    .hero-title {
+        font-size: 28px;
+        line-height: 1.2;
+        margin-bottom: 10px;
+    }
+    .hero-sub {
+        font-size: 12px;
+        line-height: 1.6;
+    }
+    .hero-pipeline {
+        flex-wrap: wrap;
+        font-size: 9px;
+        margin-top: 12px;
+        gap: 6px;
+    }
+
+    .empty-state {
+        padding: 40px 20px;
+        gap: 8px;
+    }
+    .empty-text {
+        font-size: 15px;
+    }
+    .empty-hint {
+        font-size: 10px;
+    }
+
+    .chat-area {
+        padding: 16px 12px;
+        max-width: 100%;
+    }
+
+    [data-testid="stChatMessage"] {
+        margin-bottom: 16px !important;
+    }
+    [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p {
+        font-size: 13px !important;
+        line-height: 1.6 !important;
+    }
+    [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
+        padding: 12px 14px !important;
+    }
+
+    [data-testid="stChatInput"] {
+        padding: 12px 8px !important;
+        border-top: 1px solid #d8d8d2 !important;
+    }
+    [data-testid="stChatInput"] textarea {
+        font-size: 13px !important;
+    }
+
+    [data-testid="stTextInput"] input {
+        font-size: 12px !important;
+        padding: 8px 10px !important;
+    }
+
+    [data-testid="stButton"] > button {
+        font-size: 10px !important;
+        padding: 8px 16px !important;
+    }
+
+    [data-testid="stTabs"] [role="tab"] {
+        font-size: 10px !important;
+        padding: 6px 10px 6px 0 !important;
+    }
+    [data-testid="stTabs"] [role="tablist"] {
+        margin-bottom: 12px !important;
+    }
+
+    .doc-pill {
+        font-size: 10px;
+        padding: 4px 0;
+    }
+
+    .retrieval-badge {
+        font-size: 9px;
+    }
+
+    .source-card {
+        padding: 8px 0;
+    }
+    .source-title {
+        font-size: 10px;
+    }
+    .source-score {
+        font-size: 9px;
+    }
+    .source-snippet {
+        font-size: 10px;
+    }
+
+    [data-testid="stFileUploader"] {
+        padding: 10px !important;
+    }
+
+    [data-testid="stSelectbox"] > div > div {
+        font-size: 11px !important;
+    }
+
+    [data-testid="stExpander"] summary {
+        font-size: 9px !important;
+        padding: 8px 12px !important;
+    }
+}
+
+/* Small Mobile (480px and below) */
+@media (max-width: 480px) {
+    [data-testid="stSidebar"] {
+        min-width: 220px !important;
+        max-width: 220px !important;
+    }
+    [data-testid="stSidebar"] > div {
+        padding: 20px 12px !important;
+    }
+
+    .sidebar-mark {
+        font-size: 9px;
+        margin-bottom: 16px;
+    }
+
+    .section-label {
+        font-size: 8px;
+        margin-bottom: 6px;
+    }
+
+    .hero {
+        padding: 24px 12px 18px;
+    }
+    .hero-eyebrow {
+        font-size: 8px;
+        margin-bottom: 8px;
+    }
+    .hero-title {
+        font-size: 22px;
+        margin-bottom: 8px;
+    }
+    .hero-sub {
+        font-size: 11px;
+        line-height: 1.5;
+    }
+    .hero-pipeline {
+        font-size: 8px;
+        gap: 4px;
+        margin-top: 8px;
+    }
+
+    .empty-state {
+        padding: 32px 12px;
+    }
+    .empty-text {
+        font-size: 14px;
+    }
+
+    .chat-area {
+        padding: 12px 8px;
+    }
+
+    [data-testid="stChatMessage"] {
+        margin-bottom: 12px !important;
+    }
+    [data-testid="stChatMessage"] [data-testid="stMarkdownContainer"] p {
+        font-size: 12px !important;
+    }
+    [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
+        padding: 10px 12px !important;
+    }
+
+    [data-testid="stChatInput"] {
+        padding: 10px 6px !important;
+    }
+    [data-testid="stChatInput"] textarea {
+        font-size: 12px !important;
+    }
+
+    [data-testid="stTextInput"] input {
+        font-size: 11px !important;
+        padding: 7px 8px !important;
+    }
+
+    [data-testid="stButton"] > button {
+        font-size: 9px !important;
+        padding: 7px 14px !important;
+    }
+
+    [data-testid="stTabs"] [role="tab"] {
+        font-size: 9px !important;
+        padding: 4px 8px 4px 0 !important;
+    }
+
+    .doc-pill {
+        font-size: 9px;
+    }
+
+    .retrieval-badge {
+        font-size: 8px;
+    }
+
+    .source-card {
+        padding: 6px 0;
+    }
+    .source-title {
+        font-size: 9px;
+    }
+    .source-score {
+        font-size: 8px;
+    }
+    .source-snippet {
+        font-size: 9px;
+        line-height: 1.5;
+    }
+
+    [data-testid="stSelectbox"] > div > div {
+        font-size: 10px !important;
+    }
+
+    [data-testid="stExpander"] summary {
+        font-size: 8px !important;
+        padding: 6px 10px !important;
+    }
+}
 </style>
 """, unsafe_allow_html=True)
 

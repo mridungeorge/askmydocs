@@ -18,6 +18,10 @@ export default function Chat({ messages, loading }) {
             content={msg.content}
             sources={msg.sources}
             routing={msg.routing}
+            agent_type={msg.agent_type}
+            cache_hit={msg.cache_hit}
+            rewritten_query={msg.rewritten_query}
+            quality_score={msg.quality_score}
           />
         ))}
 

@@ -118,16 +118,24 @@ export function useChat() {
         source_name: scope,
         history: messages.map(m => ({ role: m.role, content: m.content })),
       })
-      const { answer, sources, routing } = res.data
+      const { answer, sources, routing, agent_type, cache_hit, rewritten_query, quality_score } = res.data
       setMessages(prev => [...prev, {
-        role: 'assistant', content: answer,
-        sources, routing, id: Date.now() + 1,
+        role: 'assistant',
+        content: answer,
+        sources,
+        routing,
+        agent_type,
+        cache_hit,
+        rewritten_query,
+        quality_score,
+        id: Date.now() + 1,
       }])
     } catch (err) {
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: 'Something went wrong. Please try again.',
-        sources: [], id: Date.now() + 1,
+        sources: [],
+        id: Date.now() + 1,
       }])
     } finally {
       setChatLoading(false)

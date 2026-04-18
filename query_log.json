@@ -33,5 +33,47 @@
     "source": "2005.11401v4.pdf",
     "chunks_used": 5,
     "answer_chars": 548
+  },
+  {
+    "timestamp": "2026-04-15T23:08:54.774894",
+    "query": "hi",
+    "source": "Brand Voice Training Doc.pdf",
+    "chunks_used": 5,
+    "answer_chars": 188
+  },
+  {
+    "timestamp": "2026-04-15T23:09:20.130302",
+    "query": "What is the document about ",
+    "source": "Brand Voice Training Doc.pdf",
+    "chunks_used": 5,
+    "answer_chars": 219
+  },
+  {
+    "timestamp": "2026-04-15T23:09:56.037426",
+    "query": "how can i do a return in hsw ?",
+    "source": "Brand Voice Training Doc.pdf",
+    "chunks_used": 5,
+    "answer_chars": 431
+  },
+  {
+    "timestamp": "2026-04-15T23:10:25.218890",
+    "query": "how to contact customer support?",
+    "source": "Brand Voice Training Doc.pdf",
+    "chunks_used": 5,
+    "answer_chars": 301
+  },
+  {
+    "timestamp": "2026-04-15T23:11:04.300467",
+    "query": "how to do a return?",
+    "source": "Brand Voice Training Doc.pdf",
+    "chunks_used": 5,
+    "answer_chars": 1611
+  },
+  {
+    "timestamp": "2026-04-15T23:12:30.342688",
+    "query": "?where is my order ",
+    "source": "Brand Voice Training Doc.pdf",
+    "chunks_used": 5,
+    "answer_chars": 322
   }
 ]

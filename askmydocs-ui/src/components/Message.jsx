@@ -16,18 +16,18 @@ export default function Message({
           <ReactMarkdown 
             remarkPlugins={[remarkGfm]}
             components={{
-              h1: (props) => <h3 style={{marginTop: '12px', marginBottom: '8px', fontSize: '14px', fontWeight: 400}} {...props} />,
-              h2: (props) => <h4 style={{marginTop: '12px', marginBottom: '8px', fontSize: '13px', fontWeight: 400}} {...props} />,
-              h3: (props) => <h5 style={{marginTop: '12px', marginBottom: '8px', fontSize: '12px', fontWeight: 400}} {...props} />,
-              ul: (props) => <ul style={{marginLeft: '1.2em', lineHeight: '1.9', marginBottom: '8px'}} {...props} />,
-              ol: (props) => <ol style={{marginLeft: '1.2em', lineHeight: '1.9', marginBottom: '8px'}} {...props} />,
+              h1: (props) => <h3 style={{marginTop: '12px', marginBottom: '8px', fontSize: 'clamp(13px, 5vw, 14px)', fontWeight: 400}} {...props} />,
+              h2: (props) => <h4 style={{marginTop: '12px', marginBottom: '8px', fontSize: 'clamp(12px, 4.5vw, 13px)', fontWeight: 400}} {...props} />,
+              h3: (props) => <h5 style={{marginTop: '12px', marginBottom: '8px', fontSize: 'clamp(11px, 4vw, 12px)', fontWeight: 400}} {...props} />,
+              ul: (props) => <ul style={{marginLeft: 'max(1em, 2vw)', lineHeight: '1.9', marginBottom: '8px'}} {...props} />,
+              ol: (props) => <ol style={{marginLeft: 'max(1em, 2vw)', lineHeight: '1.9', marginBottom: '8px'}} {...props} />,
               li: (props) => <li style={{marginBottom: '4px'}} {...props} />,
-              p: (props) => <p style={{marginBottom: '8px'}} {...props} />,
+              p: (props) => <p style={{marginBottom: '8px', wordBreak: 'break-word'}} {...props} />,
               code: ({inline, ...props}) => 
                 inline ? (
-                  <code style={{backgroundColor: 'var(--bg-3)', padding: '2px 6px', borderRadius: '2px', fontFamily: 'monospace', fontSize: '13px'}} {...props} />
+                  <code style={{backgroundColor: 'var(--bg-3)', padding: '2px 6px', borderRadius: '2px', fontFamily: 'monospace', fontSize: 'clamp(12px, 3vw, 13px)', wordBreak: 'break-word'}} {...props} />
                 ) : (
-                  <pre style={{backgroundColor: 'var(--bg-3)', padding: '10px', borderRadius: '2px', overflow: 'auto', marginBottom: '8px'}}>
+                  <pre style={{backgroundColor: 'var(--bg-3)', padding: '10px', borderRadius: '2px', overflow: 'auto', marginBottom: '8px', fontSize: 'clamp(11px, 3vw, 12px)'}}>
                     <code {...props} />
                   </pre>
                 ),
@@ -43,61 +43,28 @@ export default function Message({
       {role === 'assistant' && (
         <>
           {(agent_type || cache_hit || routing || rewritten_query) && (
-            <div style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              gap: '12px',
-              marginTop: '16px',
-            }}>
+            <div className="message-metadata">
               {agent_type && (
-                <span style={{
-                  fontFamily: "'Noto Serif', serif",
-                  fontSize: '10px',
-                  fontStyle: 'italic',
-                  color: '#888',
-                  letterSpacing: '0.05em',
-                }}>
+                <span className="metadata-badge metadata-agent">
                   {agent_type} agent
                 </span>
               )}
 
               {cache_hit && (
-                <span style={{
-                  fontFamily: "'Noto Sans JP', sans-serif",
-                  fontSize: '10px',
-                  fontWeight: 300,
-                  letterSpacing: '0.15em',
-                  textTransform: 'uppercase',
-                  color: '#3a7a3a',
-                  padding: '2px 6px',
-                  border: '1px solid #3a7a3a',
-                }}>
+                <span className="metadata-badge metadata-cache">
                   cache {cache_hit}
                 </span>
               )}
 
               {routing && (
-                <span style={{
-                  fontFamily: "'Noto Serif', serif",
-                  fontSize: '10px',
-                  fontStyle: 'italic',
-                  color: '#888',
-                  letterSpacing: '0.05em',
-                }}>
-                  {modelLabel}  score {routing.score?.toFixed(2)}
+                <span className="metadata-badge metadata-routing">
+                  {modelLabel} · score {routing.score?.toFixed(2)}
                 </span>
               )}
 
               {rewritten_query && (
-                <span style={{
-                  fontFamily: "'Noto Serif', serif",
-                  fontSize: '10px',
-                  fontStyle: 'italic',
-                  color: '#888',
-                  letterSpacing: '0.05em',
-                }}>
-                  rewritten: "{rewritten_query.slice(0, 40)}{rewritten_query.length > 40 ? '' : ''}"
+                <span className="metadata-badge metadata-query" title={rewritten_query}>
+                  rewritten: "{rewritten_query.slice(0, 40)}{rewritten_query.length > 40 ? '…' : ''}"
                 </span>
               )}
             </div>

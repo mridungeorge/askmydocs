@@ -641,6 +641,51 @@ input, textarea { font-family: var(--sans); }
   50%       { opacity: 1;   transform: scale(1); }
 }
 
+/* Message metadata badges */
+.message-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  row-gap: 8px;
+}
+.metadata-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: clamp(8px, 2vw, 10px);
+  font-weight: 300;
+  letter-spacing: 0.05em;
+  white-space: normal;
+  word-break: break-word;
+}
+.metadata-agent {
+  font-family: 'Noto Serif', serif;
+  font-style: italic;
+  color: #888;
+}
+.metadata-cache {
+  font-family: 'Noto Sans JP', sans-serif;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #3a7a3a;
+  padding: 2px 6px;
+  border: 1px solid #3a7a3a;
+}
+.metadata-routing {
+  font-family: 'Noto Serif', serif;
+  font-style: italic;
+  color: #888;
+}
+.metadata-query {
+  font-family: 'Noto Serif', serif;
+  font-style: italic;
+  color: #888;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
 /* Chat input */
 .chat-input-bar {
   border-top: 1px solid var(--border);
@@ -755,6 +800,16 @@ input, textarea { font-family: var(--sans); }
   
   .chat-textarea {
     font-size: 13px;
+  }
+
+  /* Message metadata tablet */
+  .message-metadata {
+    gap: 10px;
+    row-gap: 7px;
+  }
+  
+  .metadata-badge {
+    font-size: 9px;
   }
 }
 
@@ -876,6 +931,41 @@ input, textarea { font-family: var(--sans); }
   .message-assistant .message-text {
     font-size: 13px;
     line-height: 1.6;
+  }
+
+  /* Message metadata mobile */
+  .message-metadata {
+    gap: 8px;
+    row-gap: 6px;
+    margin-top: 12px;
+  }
+  
+  .metadata-badge {
+    font-size: 8px;
+  }
+  
+  .metadata-cache {
+    padding: 1px 4px;
+    font-size: 7px;
+  }
+  
+  .metadata-query {
+    max-width: 100%;
+  }
+
+  /* Sources mobile */
+  .sources-toggle {
+    font-size: 9px;
+    padding: 6px 10px;
+    margin-top: 8px;
+  }
+  
+  .source-name {
+    font-size: 10px;
+  }
+  
+  .source-snippet {
+    font-size: 10px;
   }
 
   /* Chat input mobile */

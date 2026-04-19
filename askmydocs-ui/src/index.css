@@ -736,6 +736,9 @@ input, textarea { font-family: var(--sans); }
 /* Mobile Navigation */
 .mobile-menu-btn {
   display: none;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
   position: fixed;
   top: 12px;
   left: 12px;
@@ -747,10 +750,18 @@ input, textarea { font-family: var(--sans); }
   height: 40px;
   border-radius: 4px;
   cursor: pointer;
-  align-items: center;
-  justify-content: center;
+  padding: 0;
+  transition: all 0.2s ease;
 }
-.mobile-menu-btn svg { width: 20px; height: 20px; }
+.mobile-menu-btn:active {
+  transform: scale(0.95);
+}
+.mobile-menu-btn svg { 
+  width: 20px; 
+  height: 20px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 
 .sidebar-overlay {
   display: none;

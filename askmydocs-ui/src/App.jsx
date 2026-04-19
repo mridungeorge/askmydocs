@@ -85,6 +85,7 @@ export default function App() {
           scope={scope}
           status={status}
           user={user}
+          onCloseSidebar={() => setSidebarOpen(false)}
           onIngestUrl={(url) => {
             ingestUrl(url)
             setSidebarOpen(false)

@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 
 export default function Sidebar({
   ingested, allSources, scope, status, user,
-  onIngestUrl, onIngestPdf, onScopeChange, onClear, onSignOut,
+  onIngestUrl, onIngestPdf, onScopeChange, onClear, onSignOut, onCloseSidebar,
 }) {
   const [activeTab, setActiveTab] = useState('url')
   const [url, setUrl]             = useState('')
@@ -30,6 +30,17 @@ export default function Sidebar({
 
   return (
     <aside className="sidebar-inner">
+      {/* Mobile close button */}
+      <button
+        className="sidebar-close-btn"
+        onClick={onCloseSidebar}
+        aria-label="Close sidebar"
+      >
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+
       {/* User info */}
       <div style={{
         marginBottom: 32,

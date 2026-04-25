@@ -15,7 +15,7 @@ The backend validates it without hitting Supabase on every call
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from supabase import create_client, Client
-from backend.config import SUPABASE_URL, SUPABASE_SERVICE_KEY
+from backend.config import SUPABASE_URL, SUPABASE_SERVICE_KEY, DEBUG_MODE
 
 # Service role client — only used server-side, never exposed to frontend
 # Initialize lazily to handle missing env vars gracefully
@@ -30,7 +30,7 @@ def get_supabase():
         supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
     return supabase
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
@@ -38,8 +38,18 @@ async def get_current_user(
 ) -> str:
     """
     Validate JWT and return user_id.
-    In demo mode (no Supabase env vars), extract user_id from token prefix.
+    In debug/demo mode, auto-generate a demo user if no credentials provided.
     """
+    # Debug mode: auto-use demo user if no credentials
+    if DEBUG_MODE and not credentials:
+        return "debug_test_user"
+    
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authentication token",
+        )
+    
     token = credentials.credentials
     
     # Demo mode: extract user_id from token like "demo_token_demo_user_001"
@@ -51,6 +61,8 @@ async def get_current_user(
     sb = get_supabase()
     if sb is None:
         # No Supabase configured, use demo extraction
+        if DEBUG_MODE:
+            return "debug_test_user"
         return "demo_user_default"
 
     try:

@@ -1,0 +1,28 @@
+Sample Document for Testing AskMyDocs
+
+This is a test document containing information about AI and machine learning.
+
+What is Artificial Intelligence?
+Artificial Intelligence (AI) is the simulation of human intelligence processes by computer systems. These processes include learning, reasoning, and self-correction. AI is becoming increasingly important in modern society and is used in various applications such as healthcare, finance, and entertainment.
+
+Machine Learning Basics
+Machine Learning (ML) is a subset of AI that focuses on enabling computers to learn from data without being explicitly programmed. There are three main types of machine learning:
+1. Supervised Learning - where the algorithm learns from labeled data
+2. Unsupervised Learning - where the algorithm learns patterns from unlabeled data
+3. Reinforcement Learning - where the algorithm learns through rewards and penalties
+
+Deep Learning Overview
+Deep Learning is a subset of machine learning that uses neural networks with multiple layers. These networks are inspired by the human brain and can learn complex patterns in large amounts of data. Deep learning has been revolutionary in computer vision, natural language processing, and other AI fields.
+
+Applications of AI
+AI is being used in many industries today:
+- Healthcare: diagnostic imaging, drug discovery, patient monitoring
+- Finance: fraud detection, algorithmic trading, credit assessment
+- Transportation: autonomous vehicles, traffic prediction, route optimization
+- Entertainment: recommendation systems, game AI, content generation
+- Education: personalized learning, intelligent tutoring systems
+
+The Future of AI
+As AI technology continues to advance, we can expect to see more applications in various fields. However, important considerations like ethics, transparency, and regulation will also become more critical as AI systems become more powerful and widespread.
+
+This document was created for testing purposes on April 25, 2026.

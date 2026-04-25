@@ -17,8 +17,8 @@ export default function App() {
   } = useAuth()
 
   const {
-    messages, loading, allSources, scope, ingested, status,
-    setScope, ingestUrl, ingestPdf, sendMessage, clearAll,
+    messages, loading, streamingText, allSources, scope, ingested, status, summaries,
+    setScope, ingestUrl, ingestPdf, sendMessage, stopStreaming, clearAll,
   } = useChat()
 
   // Show loading spinner while checking auth
@@ -85,13 +85,14 @@ export default function App() {
           scope={scope}
           status={status}
           user={user}
+          summaries={summaries}
           onCloseSidebar={() => setSidebarOpen(false)}
           onIngestUrl={(url) => {
             ingestUrl(url)
             setSidebarOpen(false)
           }}
-          onIngestPdf={(file) => {
-            ingestPdf(file)
+          onIngestPdf={(file, useMultimodal) => {
+            ingestPdf(file, useMultimodal)
             setSidebarOpen(false)
           }}
           onScopeChange={(newScope) => {
@@ -129,7 +130,7 @@ export default function App() {
                 <span className="sep">·</span>
                 <strong>Reranking</strong>
                 <span className="sep">·</span>
-                <strong>LLM routing</strong>
+                <strong>LangGraph routing</strong>
               </div>
             </div>
             <div className="empty">
@@ -142,7 +143,7 @@ export default function App() {
               <div className="empty-text">No document loaded.</div>
               <div className="empty-actions">
                 <p style={{fontSize: '12px', color: '#888', lineHeight: '1.6', margin: 0}}>
-                  � Use the sidebar on the left (or the menu button) to load a PDF or URL
+                  ↓ Use the sidebar on the left (or the menu button) to load a PDF or URL
                 </p>
                 <button 
                   className="empty-btn empty-btn-primary empty-btn-mobile"
@@ -159,8 +160,8 @@ export default function App() {
           </>
         ) : (
           <>
-            <Chat messages={messages} loading={loading} />
-            <Input onSend={sendMessage} disabled={loading} />
+            <Chat messages={messages} loading={loading} streamingText={streamingText} />
+            <Input onSend={sendMessage} onStop={stopStreaming} disabled={loading && !streamingText} isStreaming={loading && streamingText} />
           </>
         )}
       </main>

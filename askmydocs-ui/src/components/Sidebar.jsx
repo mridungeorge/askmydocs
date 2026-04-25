@@ -1,13 +1,14 @@
 import { useState, useRef } from 'react'
 
 export default function Sidebar({
-  ingested, allSources, scope, status, user,
+  ingested, allSources, scope, status, user, summaries,
   onIngestUrl, onIngestPdf, onScopeChange, onClear, onSignOut, onCloseSidebar,
 }) {
   const [activeTab, setActiveTab] = useState('url')
   const [url, setUrl]             = useState('')
   const [fileName, setFileName]   = useState('')
   const [file, setFile]           = useState(null)
+  const [useMultimodal, setUseMultimodal] = useState(true)
   const fileRef                   = useRef()
 
   const handleFileChange = (e) => {
@@ -23,7 +24,7 @@ export default function Sidebar({
 
   const handlePdfSubmit = () => {
     if (!file) return
-    onIngestPdf(file)
+    onIngestPdf(file, useMultimodal)
     setFile(null)
     setFileName('')
   }
@@ -105,7 +106,7 @@ export default function Sidebar({
             ) : (
               <>
                 <svg viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V5h2v4h4v2z" />
                 </svg>
                 Index URL
               </>
@@ -126,6 +127,26 @@ export default function Sidebar({
             <div className="file-drop-label">{fileName ? 'PDF selected' : 'Click to select PDF'}</div>
             {fileName && <div className="file-name">{fileName}</div>}
           </div>
+
+          {/* Multimodal toggle */}
+          <label style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            fontSize: 11,
+            color: '#aaa',
+            margin: '12px 0 16px 0',
+            cursor: 'pointer',
+          }}>
+            <input
+              type="checkbox"
+              checked={useMultimodal}
+              onChange={e => setUseMultimodal(e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+            Extract images & tables
+          </label>
+
           <button className="btn-primary" onClick={handlePdfSubmit} disabled={!file || status?.type === 'loading'}>
             {status?.type === 'loading' ? (
               <>
@@ -138,7 +159,7 @@ export default function Sidebar({
             ) : (
               <>
                 <svg viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V5h2v4h4v2z" />
                 </svg>
                 Index PDF
               </>
@@ -161,6 +182,31 @@ export default function Sidebar({
             </div>
           ))}
 
+          {/* Document Summaries */}
+          {Object.keys(summaries).length > 0 && (
+            <>
+              <br />
+              <div className="section-label">Summaries</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {Object.entries(summaries).map(([docTitle, summary]) => (
+                  <div key={docTitle} style={{
+                    padding: 8,
+                    backgroundColor: '#f8f7f3',
+                    borderRadius: 4,
+                    fontSize: 10,
+                    lineHeight: 1.5,
+                    color: '#666',
+                  }}>
+                    <div style={{ fontWeight: 500, marginBottom: 4, color: '#333' }}>
+                      {docTitle.length > 30 ? docTitle.slice(0, 30) + '…' : docTitle}
+                    </div>
+                    {summary}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
           <br />
           <div className="section-label">Scope</div>
           <select
@@ -175,9 +221,9 @@ export default function Sidebar({
           </select>
 
           <div className="badge-row">
-            <div className="badge"><span className="badge-dot" />HyDE active</div>
+            <div className="badge"><span className="badge-dot" />Multimodal active</div>
             <div className="badge"><span className="badge-dot" />Hybrid search active</div>
-            <div className="badge"><span className="badge-dot" />LLM routing active</div>
+            <div className="badge"><span className="badge-dot" />LangGraph routing</div>
             <div className="badge"><span className="badge-dot" />Conversation memory</div>
           </div>
 

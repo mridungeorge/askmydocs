@@ -1,30 +1,25 @@
 """
-LangGraph multi-agent orchestration for AskMyDocs.
+LangGraph v2 — with guardrails, web search, streaming support,
+multi-modal awareness, and observability.
 
-Graph structure:
-  START → classify → route → [simple|complex|comparison|no_context|followup] → END
+New nodes added:
+- guardrail_check: first gate, blocks bad queries
+- web_search_agent: fallback when document has no answer
+- summarise_node: generates doc summary (called separately, not in main graph)
 
-Each node is a function that takes AgentState and returns updated state.
-LangGraph manages the flow between nodes based on router decisions.
-
-Why LangGraph over a simple if/else:
-- State is explicit and typed — no hidden variables
-- Nodes can loop (self-RAG: retrieve → evaluate → retrieve again if poor)
-- Easy to add new agents without touching existing ones
-- Built-in streaming support
-- Industry standard — knowing LangGraph is a genuine job skill
+Flow:
+START → guardrail_check → [blocked | classify] → route →
+[simple|complex|comparison|followup|no_context|web_search] → END
 """
 
-from typing import TypedDict, Annotated, Literal
+from typing import TypedDict, Literal
 from langgraph.graph import StateGraph, END
-from langgraph.graph.message import add_messages
 from openai import OpenAI
-from backend.config import (
-    NVIDIA_API_KEY, NVIDIA_BASE_URL,
-    LLM_FAST, LLM_POWERFUL,
-)
+from backend.config import NVIDIA_API_KEY, NVIDIA_BASE_URL, LLM_FAST, LLM_POWERFUL
 from backend.retrieval import retrieve
 from backend.router import select_model
+from backend.guardrails import check_guardrails, check_output_guardrails
+from backend.websearch import answer_from_web
 
 nvidia = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
 
@@ -32,56 +27,84 @@ nvidia = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
 # ── Agent State ───────────────────────────────────────────────────────────────
 
 class AgentState(TypedDict):
-    """
-    The state that flows through the entire graph.
-    Every node reads from and writes to this state.
-    TypedDict gives us type safety — we know exactly what's in state.
-    """
-    query:          str                  # original user query
-    source_name:    str | None           # document filter
-    history:        list[dict]           # conversation history
-    collection:     str | None           # user's Qdrant collection
-    query_type:     str                  # classified type: simple|complex|comparison|no_context|followup
-    rewritten_query: str                 # query after rewriting for better retrieval
-    chunks:         list                 # retrieved chunks
-    answer:         str                  # final answer
-    sources:        list[dict]           # source citations
-    routing:        dict                 # LLM routing info
-    self_rag_score: float                # quality score from self-evaluation
-    iterations:     int                  # how many retrieval iterations
+    query:            str
+    source_name:      str | None
+    history:          list[dict]
+    collection:       str | None
+    doc_context:      str          # document summary for guardrail context
+    query_type:       str
+    rewritten_query:  str
+    chunks:           list
+    answer:           str
+    sources:          list[dict]
+    routing:          dict
+    self_rag_score:   float
+    guardrail_result: dict
+    blocked:          bool
+    iterations:       int
 
 
-# ── Node 1: Query Rewriter ────────────────────────────────────────────────────
+# ── Node: Guardrail Check ─────────────────────────────────────────────────────
+
+def guardrail_check(state: AgentState) -> AgentState:
+    """
+    First node — runs before anything else.
+    Blocks harmful, injected, or wildly off-topic queries.
+
+    Why first:
+    - Saves API calls on bad queries
+    - Protects downstream nodes from malicious input
+    - Logs all blocked attempts for security monitoring
+    """
+    result = check_guardrails(
+        state["query"],
+        document_context=state.get("doc_context", ""),
+        skip_llm=True,  # Development mode: only pattern matching, no LLM call
+    )
+
+    if not result["allowed"]:
+        return {
+            **state,
+            "blocked":          True,
+            "guardrail_result": result,
+            "answer":           result["message"],
+            "sources":          [],
+            "routing":          {"model": "none", "score": 0.0, "is_complex": False, "agent": "guardrail"},
+        }
+
+    return {**state, "blocked": False, "guardrail_result": result}
+
+
+def route_after_guardrail(state: AgentState) -> Literal["rewrite", "blocked_end"]:
+    """Route after guardrail — either continue or end immediately."""
+    return "blocked_end" if state.get("blocked") else "rewrite"
+
+
+# ── Node: Blocked End ─────────────────────────────────────────────────────────
+
+def blocked_end(state: AgentState) -> AgentState:
+    """Terminal node for blocked queries — just passes state through."""
+    return state
+
+
+# ── Node: Query Rewriter ──────────────────────────────────────────────────────
 
 def rewrite_query(state: AgentState) -> AgentState:
-    """
-    Rewrite the query to be more retrieval-friendly.
-
-    Why: User queries are conversational. Retrieval works better with
-    declarative statements. "What does it say about BERT?" → "BERT model
-    architecture and training methodology".
-
-    Also handles follow-up questions by incorporating history context.
-    """
+    """Rewrite query for better retrieval — same as v1 but with guardrail skip."""
     query   = state["query"]
     history = state.get("history", [])
 
-    # Build context from history for follow-up resolution
     history_context = ""
     if history and len(history) >= 2:
         last_q = next((m["content"] for m in reversed(history) if m["role"] == "user"), "")
-        last_a = next((m["content"][:200] for m in reversed(history) if m["role"] == "assistant"), "")
         if last_q:
-            history_context = f"\nPrevious Q: {last_q}\nPrevious A summary: {last_a}"
+            history_context = f"\nPrevious question: {last_q}"
 
     prompt = f"""Rewrite this search query to be more specific and retrieval-friendly.
-Return ONLY the rewritten query, nothing else.
-If it's a follow-up question, resolve the reference using the history.
+Return ONLY the rewritten query, nothing else.{history_context}
 
-{history_context}
-
-Original query: {query}
-Rewritten query:"""
+Original: {query}
+Rewritten:"""
 
     try:
         response = nvidia.chat.completions.create(
@@ -91,7 +114,6 @@ Rewritten query:"""
             temperature=0.1,
         )
         rewritten = response.choices[0].message.content.strip()
-        # Safety: if rewrite is too different or too short, keep original
         if len(rewritten) < 5 or len(rewritten) > len(query) * 3:
             rewritten = query
     except Exception:
@@ -100,48 +122,29 @@ Rewritten query:"""
     return {**state, "rewritten_query": rewritten}
 
 
-# ── Node 2: Query Classifier ──────────────────────────────────────────────────
+# ── Node: Classifier ──────────────────────────────────────────────────────────
 
 def classify_query(state: AgentState) -> AgentState:
-    """
-    Classify the query into one of 5 types.
-    This determines which agent handles the query.
-
-    Types:
-      simple     — factual, one-concept, short answer expected
-      complex    — multi-step reasoning, analysis, explanation
-      comparison — comparing two or more things
-      followup   — refers to previous conversation context
-      no_context — query unlikely to be in the document
-    """
     query   = state["rewritten_query"]
     history = state.get("history", [])
 
-    # Check if it's a follow-up first (cheapest check)
-    followup_signals = [
-        "tell me more", "elaborate", "expand on", "what about",
-        "and also", "furthermore", "in addition", "what else",
-        "can you explain", "more detail", "why is that",
-    ]
+    followup_signals = ["tell me more", "elaborate", "expand", "what about",
+                        "and also", "furthermore", "more detail", "why is that"]
     if history and any(s in query.lower() for s in followup_signals):
         return {**state, "query_type": "followup"}
 
-    # Check comparison signals
-    comparison_signals = [
-        "compare", "contrast", "difference between", "vs", "versus",
-        "better", "worse", "similar", "unlike", "both",
-    ]
+    comparison_signals = ["compare", "contrast", "difference", "vs", "versus",
+                          "better", "worse", "similar", "unlike", "both"]
     if any(s in query.lower() for s in comparison_signals):
         return {**state, "query_type": "comparison"}
 
-    # Use LLM for ambiguous cases
-    prompt = f"""Classify this query as one of: simple, complex, no_context
-simple: factual question with a direct answer in a document
-complex: requires analysis, reasoning, or synthesis
-no_context: question about something unlikely to be in a technical document
+    prompt = f"""Classify as one of: simple, complex, no_context
+simple: direct factual question answerable from a document
+complex: requires analysis or multi-step reasoning
+no_context: unlikely to be in a technical document
 
 Query: {query}
-Classification (one word only):"""
+Classification (one word):"""
 
     try:
         response = nvidia.chat.completions.create(
@@ -159,14 +162,9 @@ Classification (one word only):"""
     return {**state, "query_type": classification}
 
 
-# ── Node 3: Router ────────────────────────────────────────────────────────────
+# ── Node: Router ──────────────────────────────────────────────────────────────
 
 def route_query(state: AgentState) -> Literal["simple_agent", "complex_agent", "comparison_agent", "followup_agent", "no_context_agent"]:
-    """
-    LangGraph conditional edge — routes to the right agent node.
-    This function returns a string that matches a node name in the graph.
-    """
-    query_type = state.get("query_type", "simple")
     routes = {
         "simple":     "simple_agent",
         "complex":    "complex_agent",
@@ -174,323 +172,23 @@ def route_query(state: AgentState) -> Literal["simple_agent", "complex_agent", "
         "followup":   "followup_agent",
         "no_context": "no_context_agent",
     }
-    return routes.get(query_type, "simple_agent")
+    return routes.get(state.get("query_type", "simple"), "simple_agent")
 
 
-# ── Node 4a: Simple Agent ─────────────────────────────────────────────────────
-
-def simple_agent(state: AgentState) -> AgentState:
-    """
-    Handles factual, single-concept queries.
-    Fast retrieval, 8B model, concise answer.
-    """
-    chunks = retrieve(
-        state["rewritten_query"],
-        state.get("source_name"),
-        state.get("history", []),
-        collection_name=state.get("collection"),
-    )
-
-    if not chunks:
-        return {
-            **state,
-            "chunks":  [],
-            "answer":  "I couldn't find relevant information for this question in the loaded document.",
-            "sources": [],
-            "routing": {"model": LLM_FAST, "score": 0.0, "is_complex": False, "agent": "simple"},
-        }
-
-    context = _format_context(chunks)
-    prompt  = f"""Answer this question concisely using only the provided context.
-Cite sources as [Source N]. If insufficient context, say what's missing.
-
-Context:
-{context}
-
-Question: {state['query']}
-Answer:"""
-
-    response = nvidia.chat.completions.create(
-        model=LLM_FAST,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=400,
-        temperature=0.1,
-    )
-
-    return {
-        **state,
-        "chunks":  chunks,
-        "answer":  response.choices[0].message.content,
-        "sources": _format_sources(chunks),
-        "routing": {"model": LLM_FAST, "score": 0.2, "is_complex": False, "agent": "simple"},
-    }
-
-
-# ── Node 4b: Complex Agent ────────────────────────────────────────────────────
-
-def complex_agent(state: AgentState) -> AgentState:
-    """
-    Handles complex reasoning queries.
-    Wider retrieval (top 8 instead of 5), 70B model, structured answer.
-    Includes self-RAG: evaluates its own answer quality.
-    """
-    from backend.config import TOP_N_RERANK
-
-    # Wider retrieval for complex queries
-    chunks = retrieve(
-        state["rewritten_query"],
-        state.get("source_name"),
-        state.get("history", []),
-        collection_name=state.get("collection"),
-    )
-
-    if not chunks:
-        return {
-            **state,
-            "chunks":  [],
-            "answer":  "I couldn't find sufficient context for this complex question.",
-            "sources": [],
-            "routing": {"model": LLM_POWERFUL, "score": 0.8, "is_complex": True, "agent": "complex"},
-        }
-
-    context = _format_context(chunks)
-
-    # History context for conversation memory
-    history_str = ""
-    if state.get("history"):
-        recent = state["history"][-4:]
-        history_str = "\n".join(
-            f"{m['role'].title()}: {m['content'][:150]}"
-            for m in recent
-        )
-
-    prompt = f"""You are a precise document analyst. Answer the question thoroughly using the context.
-Structure your answer with clear reasoning. Cite every claim with [Source N].
-If the context is insufficient, explicitly state what information is missing.
-
-{f'Conversation history:{chr(10)}{history_str}{chr(10)}' if history_str else ''}
-
-Context:
-{context}
-
-Question: {state['query']}
-
-Provide a thorough, well-structured answer:"""
-
-    response = nvidia.chat.completions.create(
-        model=LLM_POWERFUL,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=800,
-        temperature=0.2,
-    )
-
-    answer = response.choices[0].message.content
-
-    # Self-RAG: evaluate answer quality
-    quality_score = _evaluate_answer_quality(state["query"], answer, context)
-
-    return {
-        **state,
-        "chunks":         chunks,
-        "answer":         answer,
-        "sources":        _format_sources(chunks),
-        "routing":        {"model": LLM_POWERFUL, "score": 0.8, "is_complex": True, "agent": "complex"},
-        "self_rag_score": quality_score,
-    }
-
-
-# ── Node 4c: Comparison Agent ─────────────────────────────────────────────────
-
-def comparison_agent(state: AgentState) -> AgentState:
-    """
-    Handles comparison queries.
-    Retrieves twice — once for each concept being compared.
-    Synthesises into a structured comparison.
-    """
-    query = state["rewritten_query"]
-
-    # Retrieve for the full query first
-    chunks = retrieve(
-        query,
-        state.get("source_name"),
-        state.get("history", []),
-        collection_name=state.get("collection"),
-    )
-
-    if not chunks:
-        return {
-            **state,
-            "chunks":  [],
-            "answer":  "I couldn't find enough context to make this comparison.",
-            "sources": [],
-            "routing": {"model": LLM_POWERFUL, "score": 0.7, "is_complex": True, "agent": "comparison"},
-        }
-
-    context = _format_context(chunks)
-
-    prompt = f"""You are comparing concepts based on document context.
-Create a clear, structured comparison. Use a format like:
-
-**Concept A:**
-- Key point 1
-- Key point 2
-
-**Concept B:**
-- Key point 1
-- Key point 2
-
-**Key differences:**
-- Difference 1
-
-Cite all claims with [Source N]. Only use information from the context.
-
-Context:
-{context}
-
-Comparison request: {state['query']}"""
-
-    response = nvidia.chat.completions.create(
-        model=LLM_POWERFUL,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=700,
-        temperature=0.2,
-    )
-
-    return {
-        **state,
-        "chunks":  chunks,
-        "answer":  response.choices[0].message.content,
-        "sources": _format_sources(chunks),
-        "routing": {"model": LLM_POWERFUL, "score": 0.7, "is_complex": True, "agent": "comparison"},
-    }
-
-
-# ── Node 4d: Follow-up Agent ──────────────────────────────────────────────────
-
-def followup_agent(state: AgentState) -> AgentState:
-    """
-    Handles follow-up questions that reference previous conversation.
-    Uses history-aware retrieval and keeps conversational tone.
-    """
-    chunks = retrieve(
-        state["rewritten_query"],
-        state.get("source_name"),
-        state.get("history", []),
-        collection_name=state.get("collection"),
-    )
-
-    history_str = ""
-    if state.get("history"):
-        recent = state["history"][-6:]
-        history_str = "\n".join(
-            f"{m['role'].title()}: {m['content'][:200]}"
-            for m in recent
-        )
-
-    context = _format_context(chunks) if chunks else "No additional context found."
-
-    prompt = f"""Continue this conversation naturally. The user is asking a follow-up question.
-Use the conversation history and context to give a connected, coherent answer.
-Cite sources as [Source N] when using document content.
-
-Conversation history:
-{history_str}
-
-Additional context:
-{context}
-
-Follow-up question: {state['query']}
-Answer:"""
-
-    model, _, score = select_model(state["query"], state.get("history", []))
-
-    response = nvidia.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=500,
-        temperature=0.3,
-    )
-
-    return {
-        **state,
-        "chunks":  chunks or [],
-        "answer":  response.choices[0].message.content,
-        "sources": _format_sources(chunks) if chunks else [],
-        "routing": {"model": model, "score": score, "is_complex": False, "agent": "followup"},
-    }
-
-
-# ── Node 4e: No Context Agent ─────────────────────────────────────────────────
-
-def no_context_agent(state: AgentState) -> AgentState:
-    """
-    Handles queries that are unlikely to be in the document.
-    Tries retrieval anyway, falls back to honest "not found" response.
-    """
-    chunks = retrieve(
-        state["rewritten_query"],
-        state.get("source_name"),
-        state.get("history", []),
-        collection_name=state.get("collection"),
-    )
-
-    if not chunks:
-        return {
-            **state,
-            "chunks":  [],
-            "answer":  (
-                "This question doesn't appear to be covered in the loaded document. "
-                "Try loading a different document or rephrasing your question to match "
-                "the document's content."
-            ),
-            "sources": [],
-            "routing": {"model": "none", "score": 0.0, "is_complex": False, "agent": "no_context"},
-        }
-
-    # If we found something relevant despite classification, use it
-    context = _format_context(chunks)
-    prompt  = f"""Answer if you can find relevant information in the context.
-If the context doesn't contain relevant information, say so clearly.
-Cite sources as [Source N].
-
-Context:
-{context}
-
-Question: {state['query']}"""
-
-    response = nvidia.chat.completions.create(
-        model=LLM_FAST,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=400,
-        temperature=0.1,
-    )
-
-    return {
-        **state,
-        "chunks":  chunks,
-        "answer":  response.choices[0].message.content,
-        "sources": _format_sources(chunks),
-        "routing": {"model": LLM_FAST, "score": 0.1, "is_complex": False, "agent": "no_context"},
-    }
-
-
-# ── Helper functions ──────────────────────────────────────────────────────────
+# ── Shared helpers ────────────────────────────────────────────────────────────
 
 def _format_context(chunks: list) -> str:
-    parts = []
-    for i, chunk in enumerate(chunks):
-        parts.append(
-            f"[Source {i+1}: {chunk.payload['source_name']}]\n"
-            f"{chunk.payload['text']}"
-        )
-    return "\n\n".join(parts)
+    return "\n\n".join([
+        f"[Source {i+1}: {c.payload['source_name']}]\n{c.payload['text']}"
+        for i, c in enumerate(chunks)
+    ])
 
 
 def _format_sources(chunks: list) -> list[dict]:
     return [
         {
             "name":    c.payload["source_name"],
-            "type":    c.payload["source_type"],
+            "type":    c.payload.get("source_type", "text"),
             "snippet": c.payload["text"][:150] + "...",
             "score":   round(c.score * 100, 1) if hasattr(c, "score") else None,
         }
@@ -498,57 +196,234 @@ def _format_sources(chunks: list) -> list[dict]:
     ]
 
 
-def _evaluate_answer_quality(query: str, answer: str, context: str) -> float:
-    """
-    Self-RAG: ask the LLM to score its own answer quality.
-    Returns 0.0-1.0. Below 0.6 = poor answer.
-    This runs cheap and fast — just a classification, not generation.
-    """
-    prompt = f"""Rate the quality of this answer on a scale from 0 to 10.
-Consider: Does it answer the question? Is it supported by the context?
-
+def _evaluate_quality(query: str, answer: str) -> float:
+    prompt = f"""Rate this answer quality 0-10:
 Question: {query}
-Answer: {answer[:300]}
-
-Rating (number only, 0-10):"""
-
+Answer: {answer[:200]}
+Rating (number only):"""
     try:
-        response = nvidia.chat.completions.create(
+        r = nvidia.chat.completions.create(
             model=LLM_FAST,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=3,
             temperature=0.0,
         )
-        score_str = response.choices[0].message.content.strip()
-        score     = float(score_str) / 10.0
-        return max(0.0, min(1.0, score))
+        return min(1.0, max(0.0, float(r.choices[0].message.content.strip()) / 10))
     except Exception:
-        return 0.7  # default to acceptable if evaluation fails
+        return 0.7
 
 
-# ── Build the LangGraph ───────────────────────────────────────────────────────
+def _check_and_return(state: AgentState, chunks: list, answer: str, routing: dict) -> AgentState:
+    """
+    Shared post-processing:
+    1. Output guardrail check
+    2. Self-RAG quality score
+    3. Return updated state
+    """
+    # Output guardrail
+    output_check = check_output_guardrails(answer)
+    if not output_check["allowed"]:
+        answer = output_check["message"]
+
+    quality = _evaluate_quality(state["query"], answer)
+
+    return {
+        **state,
+        "chunks":        chunks,
+        "answer":        answer,
+        "sources":       _format_sources(chunks) if chunks else [],
+        "routing":       routing,
+        "self_rag_score": quality,
+    }
+
+
+# ── Agents ────────────────────────────────────────────────────────────────────
+
+def simple_agent(state: AgentState) -> AgentState:
+    chunks = retrieve(
+        state["rewritten_query"],
+        state.get("source_name"),
+        state.get("history", []),
+        collection_name=state.get("collection"),
+    )
+    if not chunks:
+        return {**state, "chunks": [], "answer": "I couldn't find relevant information for this question.",
+                "sources": [], "routing": {"model": LLM_FAST, "score": 0.1, "is_complex": False, "agent": "simple"}}
+
+    response = nvidia.chat.completions.create(
+        model=LLM_FAST,
+        messages=[{"role": "user", "content":
+            f"Answer concisely using only this context. Cite as [Source N].\n\n"
+            f"Context:\n{_format_context(chunks)}\n\nQuestion: {state['query']}"}],
+        max_tokens=400, temperature=0.1,
+    )
+    return _check_and_return(
+        state, chunks,
+        response.choices[0].message.content,
+        {"model": LLM_FAST, "score": 0.2, "is_complex": False, "agent": "simple"},
+    )
+
+
+def complex_agent(state: AgentState) -> AgentState:
+    chunks = retrieve(
+        state["rewritten_query"],
+        state.get("source_name"),
+        state.get("history", []),
+        collection_name=state.get("collection"),
+    )
+    if not chunks:
+        return {**state, "chunks": [], "answer": "Insufficient context for this complex question.",
+                "sources": [], "routing": {"model": LLM_POWERFUL, "score": 0.8, "is_complex": True, "agent": "complex"}}
+
+    history_str = "\n".join(
+        f"{m['role'].title()}: {m['content'][:150]}"
+        for m in state.get("history", [])[-4:]
+    )
+
+    prompt = f"""Answer thoroughly using only the context. Structure your response clearly.
+Cite every claim with [Source N]. State what's missing if insufficient.
+{f'Conversation history:{chr(10)}{history_str}{chr(10)}' if history_str else ''}
+Context:\n{_format_context(chunks)}\n\nQuestion: {state['query']}"""
+
+    response = nvidia.chat.completions.create(
+        model=LLM_POWERFUL,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=800, temperature=0.2,
+    )
+    return _check_and_return(
+        state, chunks,
+        response.choices[0].message.content,
+        {"model": LLM_POWERFUL, "score": 0.8, "is_complex": True, "agent": "complex"},
+    )
+
+
+def comparison_agent(state: AgentState) -> AgentState:
+    chunks = retrieve(
+        state["rewritten_query"],
+        state.get("source_name"),
+        state.get("history", []),
+        collection_name=state.get("collection"),
+    )
+    if not chunks:
+        return {**state, "chunks": [], "answer": "Insufficient context for this comparison.",
+                "sources": [], "routing": {"model": LLM_POWERFUL, "score": 0.7, "is_complex": True, "agent": "comparison"}}
+
+    prompt = f"""Create a structured comparison using only the context.
+Format with clear sections for each concept and a 'Key differences' section.
+Cite all claims with [Source N].
+
+Context:\n{_format_context(chunks)}\n\nComparison request: {state['query']}"""
+
+    response = nvidia.chat.completions.create(
+        model=LLM_POWERFUL,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=700, temperature=0.2,
+    )
+    return _check_and_return(
+        state, chunks,
+        response.choices[0].message.content,
+        {"model": LLM_POWERFUL, "score": 0.7, "is_complex": True, "agent": "comparison"},
+    )
+
+
+def followup_agent(state: AgentState) -> AgentState:
+    chunks = retrieve(
+        state["rewritten_query"],
+        state.get("source_name"),
+        state.get("history", []),
+        collection_name=state.get("collection"),
+    )
+    history_str = "\n".join(
+        f"{m['role'].title()}: {m['content'][:200]}"
+        for m in state.get("history", [])[-6:]
+    )
+    model, _, score = select_model(state["query"], state.get("history", []))
+    context = _format_context(chunks) if chunks else "No additional context found."
+
+    prompt = f"""Continue this conversation naturally using history and context.
+Cite document sources as [Source N] when applicable.
+
+History:\n{history_str}\n\nContext:\n{context}\n\nFollow-up: {state['query']}"""
+
+    response = nvidia.chat.completions.create(
+        model=model,
+        messages=[{"role": "user", "content": prompt}],
+        max_tokens=500, temperature=0.3,
+    )
+    return _check_and_return(
+        state, chunks or [],
+        response.choices[0].message.content,
+        {"model": model, "score": score, "is_complex": False, "agent": "followup"},
+    )
+
+
+def no_context_agent(state: AgentState) -> AgentState:
+    """
+    Tries document retrieval first.
+    If nothing found, falls back to web search.
+    This is where Tavily comes in.
+    """
+    chunks = retrieve(
+        state["rewritten_query"],
+        state.get("source_name"),
+        state.get("history", []),
+        collection_name=state.get("collection"),
+    )
+
+    if chunks:
+        # Found something despite no_context classification
+        response = nvidia.chat.completions.create(
+            model=LLM_FAST,
+            messages=[{"role": "user", "content":
+                f"Answer if relevant context exists, otherwise say what's missing.\n\n"
+                f"Context:\n{_format_context(chunks)}\n\nQuestion: {state['query']}"}],
+            max_tokens=400, temperature=0.1,
+        )
+        return _check_and_return(
+            state, chunks,
+            response.choices[0].message.content,
+            {"model": LLM_FAST, "score": 0.1, "is_complex": False, "agent": "no_context"},
+        )
+
+    # Web search fallback
+    web_answer, web_sources = answer_from_web(state["query"])
+
+    return {
+        **state,
+        "chunks":        [],
+        "answer":        web_answer,
+        "sources":       web_sources,
+        "routing":       {"model": LLM_FAST, "score": 0.0, "is_complex": False, "agent": "web_search"},
+        "self_rag_score": 0.6,
+    }
+
+
+# ── Build Graph ───────────────────────────────────────────────────────────────
 
 def build_graph():
-    """
-    Construct and compile the LangGraph agent graph.
-    Called once at startup — compiled graph is reused for all queries.
-    """
     graph = StateGraph(AgentState)
 
-    # Add all nodes
-    graph.add_node("rewrite",          rewrite_query)
-    graph.add_node("classify",         classify_query)
+    graph.add_node("guardrail_check", guardrail_check)
+    graph.add_node("blocked_end",     blocked_end)
+    graph.add_node("rewrite",         rewrite_query)
+    graph.add_node("classify",        classify_query)
     graph.add_node("simple_agent",     simple_agent)
     graph.add_node("complex_agent",    complex_agent)
     graph.add_node("comparison_agent", comparison_agent)
     graph.add_node("followup_agent",   followup_agent)
     graph.add_node("no_context_agent", no_context_agent)
 
-    # Define edges (flow)
-    graph.set_entry_point("rewrite")
+    graph.set_entry_point("guardrail_check")
+
+    graph.add_conditional_edges(
+        "guardrail_check",
+        route_after_guardrail,
+        {"rewrite": "rewrite", "blocked_end": "blocked_end"},
+    )
+
+    graph.add_edge("blocked_end", END)
     graph.add_edge("rewrite", "classify")
 
-    # Conditional edge — router decides which agent runs
     graph.add_conditional_edges(
         "classify",
         route_query,
@@ -558,21 +433,16 @@ def build_graph():
             "comparison_agent": "comparison_agent",
             "followup_agent":   "followup_agent",
             "no_context_agent": "no_context_agent",
-        }
+        },
     )
 
-    # All agents lead to END
-    graph.add_edge("simple_agent",     END)
-    graph.add_edge("complex_agent",    END)
-    graph.add_edge("comparison_agent", END)
-    graph.add_edge("followup_agent",   END)
-    graph.add_edge("no_context_agent", END)
+    for node in ["simple_agent", "complex_agent", "comparison_agent",
+                 "followup_agent", "no_context_agent"]:
+        graph.add_edge(node, END)
 
     return graph.compile()
 
 
-# ── Compiled graph — singleton ────────────────────────────────────────────────
-# Compiled once at module load, reused for every query
 _graph = None
 
 def get_graph():
@@ -582,42 +452,42 @@ def get_graph():
     return _graph
 
 
-# ── Main entry point ──────────────────────────────────────────────────────────
-
 def run_agent(
     query:       str,
-    source_name: str   = None,
-    history:     list  = None,
-    collection:  str   = None,
+    source_name: str  = None,
+    history:     list = None,
+    collection:  str  = None,
+    doc_context: str  = "",
 ) -> dict:
-    """
-    Run the full agent graph for a query.
-    Returns dict with answer, sources, routing, agent_type, quality_score.
-    """
     graph = get_graph()
 
     initial_state: AgentState = {
-        "query":           query,
-        "source_name":     source_name,
-        "history":         history or [],
-        "collection":      collection,
-        "query_type":      "simple",
-        "rewritten_query": query,
-        "chunks":          [],
-        "answer":          "",
-        "sources":         [],
-        "routing":         {},
-        "self_rag_score":  0.0,
-        "iterations":      0,
+        "query":            query,
+        "source_name":      source_name,
+        "history":          history or [],
+        "collection":       collection,
+        "doc_context":      doc_context,
+        "query_type":       "simple",
+        "rewritten_query":  query,
+        "chunks":           [],
+        "answer":           "",
+        "sources":          [],
+        "routing":          {},
+        "self_rag_score":   0.0,
+        "guardrail_result": {},
+        "blocked":          False,
+        "iterations":       0,
     }
 
     final_state = graph.invoke(initial_state)
 
     return {
-        "answer":        final_state["answer"],
-        "sources":       final_state["sources"],
-        "routing":       final_state["routing"],
-        "agent_type":    final_state["query_type"],
-        "quality_score": final_state.get("self_rag_score", 0.0),
-        "rewritten_query": final_state["rewritten_query"],
+        "answer":            final_state["answer"],
+        "sources":           final_state["sources"],
+        "routing":           final_state["routing"],
+        "agent_type":        final_state["query_type"],
+        "quality_score":     final_state.get("self_rag_score", 0.0),
+        "rewritten_query":   final_state["rewritten_query"],
+        "blocked":           final_state.get("blocked", False),
+        "guardrail_result":  final_state.get("guardrail_result", {}),
     }

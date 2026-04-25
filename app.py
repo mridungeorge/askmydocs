@@ -7,24 +7,6 @@ from backend.agents import run_agent
 from backend.logger import log_query
 from backend.guardrails import check_guardrails
 
-# ── Supabase Auth ──────────────────────────────────────────────────────────────
-try:
-    from supabase import create_client
-    from supabase.lib.client_options import ClientOptions
-    
-    supabase_url = st.secrets.get("SUPABASE_URL") or os.getenv("SUPABASE_URL")
-    supabase_key = st.secrets.get("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_SERVICE_KEY")
-    
-    if supabase_url and supabase_key:
-        supabase = create_client(supabase_url, supabase_key)
-        auth_enabled = True
-    else:
-        auth_enabled = False
-        st.warning("⚠️ Supabase not configured. Using demo mode (no auth).")
-except Exception as e:
-    auth_enabled = False
-    st.warning(f"⚠️ Auth unavailable: {str(e)[:50]}. Using demo mode.")
-
 st.set_page_config(
     page_title="AskMyDocs",
     page_icon="Γù╗",
@@ -106,18 +88,6 @@ for k, v in defaults.items():
 
 # Sidebar
 with st.sidebar:
-    # Auth section
-    st.markdown('<div class="sidebar-mark">Authentication</div>', unsafe_allow_html=True)
-    if auth_enabled:
-        st.info("✅ Authenticated (Supabase configured)")
-        if st.button("Sign out", key="btn_signout"):
-            st.session_state.user_id = "demo-user"
-            st.rerun()
-    else:
-        st.info("🔓 Demo mode (no authentication)")
-    
-    st.markdown("---")
-    
     st.markdown('<div class="sidebar-mark">Document</div>', unsafe_allow_html=True)
     st.markdown('<div class="section-label">Load source</div>', unsafe_allow_html=True)
 

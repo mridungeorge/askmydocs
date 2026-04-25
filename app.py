@@ -166,32 +166,32 @@ with st.sidebar:
     st.markdown("<br>" * 3, unsafe_allow_html=True)
     st.markdown(
         '<div style="font-family:\'Noto Serif\',serif;font-size:10px;'
-        'color:#ccc;letter-spacing:0.2em;font-style:italic;">AskMyDocs ┬╖ 2026</div>',
+        'color:#ccc;letter-spacing:0.2em;font-style:italic;">AskMyDocs • 2026</div>',
         unsafe_allow_html=True,
     )
 
-# ΓöÇΓöÇ Main ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+# ── Main ──
 if not st.session_state.ingested:
     st.markdown("""
     <div class="hero">
-        <div class="hero-eyebrow">RAG ┬╖ Agentic Document Intelligence</div>
+        <div class="hero-eyebrow">RAG • Agentic Document Intelligence</div>
         <div class="hero-title">Ask anything.<br><em>Get cited answers.</em></div>
         <div class="hero-sub">
             Load any PDF or public URL from the sidebar.<br>
             Multi-agent system routes each query to the right specialist.
         </div>
         <div class="hero-pipeline">
-            <strong>Classify</strong><span class="sep">┬╖</span>
-            <strong>Route</strong><span class="sep">┬╖</span>
-            <strong>Retrieve</strong><span class="sep">┬╖</span>
-            <strong>Evaluate</strong><span class="sep">┬╖</span>
+            <strong>Classify</strong><span class="sep">•</span>
+            <strong>Route</strong><span class="sep">•</span>
+            <strong>Retrieve</strong><span class="sep">•</span>
+            <strong>Evaluate</strong><span class="sep">•</span>
             <strong>Answer</strong>
         </div>
     </div>
     <div class="empty-state">
         <div class="empty-mark"></div>
         <div class="empty-text">No document loaded.</div>
-        <div class="empty-hint">ΓåÉ load a source to begin</div>
+        <div class="empty-hint">ℹ️ Load a source to begin</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -240,7 +240,7 @@ else:
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    query = st.chat_input("Ask a questionΓÇª")
+    query = st.chat_input("Ask a question…")
     if query:
         st.session_state.messages.append({"role": "user", "content": query, "original_query": query})
         with st.chat_message("user"):

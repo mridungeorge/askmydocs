@@ -21,7 +21,14 @@ from openai import OpenAI
 from backend.config import NVIDIA_API_KEY, NVIDIA_BASE_URL, LLM_FAST
 from backend.auth import supabase
 
-nvidia = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
+_nvidia_client = None
+
+def get_nvidia_client():
+    """Lazy initialization of NVIDIA API client."""
+    global _nvidia_client
+    if _nvidia_client is None:
+        _nvidia_client = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
+    return _nvidia_client
 
 
 def generate_summary(
@@ -68,7 +75,7 @@ Document excerpt:
 3-sentence summary:"""
 
     try:
-        response = nvidia.chat.completions.create(
+        response = get_nvidia_client().chat.completions.create(
             model=LLM_FAST,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=150,

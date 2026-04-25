@@ -6,6 +6,7 @@ from backend.retrieval import embed_query
 from backend.agents import run_agent
 from backend.logger import log_query
 from backend.guardrails import check_guardrails
+from backend.summariser import get_summary
 
 st.set_page_config(
     page_title="AskMyDocs",
@@ -140,6 +141,18 @@ with st.sidebar:
             label_visibility="collapsed",
         )
         st.session_state.source_filter = None if selected == "All documents" else selected
+
+        # Display document summary if loaded
+        if st.session_state.ingested and st.session_state.source_name:
+            try:
+                summary = get_summary("demo-user", st.session_state.source_name)
+                if summary:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.markdown('<div class="section-label">Summary</div>', unsafe_allow_html=True)
+                    st.caption(summary)
+            except Exception:
+                # Silently skip summary on error (e.g., NVIDIA_API_KEY not set)
+                pass
 
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("""

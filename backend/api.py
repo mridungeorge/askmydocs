@@ -279,17 +279,19 @@ async def chat_stream(
                 if cached:
                     # Stream cached answer token by token
                     for chunk in cached["answer"].split():
-                        yield f'data: {json.dumps({"type": "token", "content": chunk + " "})}\n\n'
+                        token_data = json.dumps({"type": "token", "content": chunk + " "})
+                        yield f'data: {token_data}\n\n'
                         await asyncio.sleep(0.01)  # Small delay for visual effect
                     
                     latency_ms = int((time.time() - start_time) * 1000)
-                    yield f'data: {json.dumps({
+                    done_data = json.dumps({
                         "type": "done",
                         "sources": cached.get("sources", []),
                         "routing": cached.get("routing", {}),
                         "cache_hit": "yes",
                         "latency_ms": latency_ms,
-                    })}\n\n'
+                    })
+                    yield f'data: {done_data}\n\n'
                     return
 
                 # Step 4: Run agent graph (synchronous, non-streaming LLM calls)
@@ -305,7 +307,8 @@ async def chat_stream(
                 # Step 5: Stream answer token by token
                 answer = result.get("answer", "No answer generated")
                 for word in answer.split():
-                    yield f'data: {json.dumps({"type": "token", "content": word + " "})}\n\n'
+                    token_data = json.dumps({"type": "token", "content": word + " "})
+                    yield f'data: {token_data}\n\n'
                     await asyncio.sleep(0.01)  # Small delay for visual effect
 
                 # Step 6: Send completion metadata
@@ -323,7 +326,7 @@ async def chat_stream(
                             "url": s.get("url"),
                         })
                 
-                yield f'data: {json.dumps({
+                done_data = json.dumps({
                     "type": "done",
                     "sources": sources_list,
                     "routing": result.get("routing", {}),
@@ -332,7 +335,8 @@ async def chat_stream(
                     "cache_hit": "no",
                     "latency_ms": latency_ms,
                     "blocked": result.get("blocked", False),
-                })}\n\n'
+                })
+                yield f'data: {done_data}\n\n'
 
                 # Step 7: Write to cache
                 set_cached_answer(

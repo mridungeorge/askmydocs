@@ -27,7 +27,17 @@ from backend.config import (
     LLM_FAST, TAVILY_API_KEY, WEB_SEARCH_ENABLED,
 )
 
-nvidia = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
+# Lazy initialization — only create client when needed
+_nvidia_client = None
+
+def get_nvidia_client():
+    """Lazily initialize and return NVIDIA OpenAI client."""
+    global _nvidia_client
+    if _nvidia_client is None:
+        if not NVIDIA_API_KEY:
+            raise RuntimeError("NVIDIA_API_KEY environment variable not set")
+        _nvidia_client = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
+    return _nvidia_client
 
 
 def web_search(query: str, max_results: int = 5) -> list[dict]:
@@ -105,7 +115,7 @@ Cite web sources as [Web Source N].
 Keep the answer concise — 3-4 sentences maximum."""
 
     try:
-        response = nvidia.chat.completions.create(
+        response = get_nvidia_client().chat.completions.create(
             model=LLM_FAST,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=400,

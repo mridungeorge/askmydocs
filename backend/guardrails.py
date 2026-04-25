@@ -25,7 +25,17 @@ import re
 from openai import OpenAI
 from backend.config import NVIDIA_API_KEY, NVIDIA_BASE_URL, LLM_FAST, GUARDRAIL_THRESHOLD
 
-nvidia = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
+# Lazy initialization — only create client when needed
+_nvidia_client = None
+
+def get_nvidia_client():
+    """Lazily initialize and return NVIDIA OpenAI client."""
+    global _nvidia_client
+    if _nvidia_client is None:
+        if not NVIDIA_API_KEY:
+            raise RuntimeError("NVIDIA_API_KEY environment variable not set")
+        _nvidia_client = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
+    return _nvidia_client
 
 
 # ── Pattern-based checks (instant, no API call) ───────────────────────────────
@@ -107,7 +117,7 @@ score: <number>
 category: <category>"""
 
     try:
-        response = nvidia.chat.completions.create(
+        response = get_nvidia_client().chat.completions.create(
             model=LLM_FAST,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=20,

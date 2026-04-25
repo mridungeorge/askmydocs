@@ -32,7 +32,17 @@ import io
 from openai import OpenAI
 from backend.config import NVIDIA_API_KEY, NVIDIA_BASE_URL, VISION_MODEL
 
-nvidia = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
+# Lazy initialization — only create client when needed
+_nvidia_client = None
+
+def get_nvidia_client():
+    """Lazily initialize and return NVIDIA OpenAI client."""
+    global _nvidia_client
+    if _nvidia_client is None:
+        if not NVIDIA_API_KEY:
+            raise RuntimeError("NVIDIA_API_KEY environment variable not set")
+        _nvidia_client = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
+    return _nvidia_client
 
 
 def extract_images_from_pdf(pdf_bytes: bytes) -> list[dict]:
@@ -171,7 +181,7 @@ Focus on:
 Be specific and factual. Your description will be used to answer questions about this document."""
 
     try:
-        response = nvidia.chat.completions.create(
+        response = get_nvidia_client().chat.completions.create(
             model=VISION_MODEL,
             messages=[
                 {

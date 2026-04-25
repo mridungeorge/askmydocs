@@ -244,7 +244,10 @@ else:
                     model_s = "70B" if "70b" in r.get("model","") else "8B"
                     meta_parts.append(f'<span class="agent-tag">{model_s} ┬╖ score {r.get("score",0):.2f}</span>')
                 if msg.get("rewritten_query") and msg["rewritten_query"] != msg.get("original_query"):
-                    meta_parts.append(f'<span class="agent-tag">rewritten: "{msg["rewritten_query"][:40]}ΓÇª"</span>')
+                    # Extract just the first part before any OR operators for cleaner display
+                    display_rewritten = msg["rewritten_query"].split(" OR ")[0].strip().strip('"')[:40]
+                    if display_rewritten:
+                        meta_parts.append(f'<span class="agent-tag">rewritten: "{display_rewritten}ΓÇª"</span>')
 
                 if meta_parts:
                     st.markdown(
@@ -330,7 +333,10 @@ else:
                 model_s = "70B" if "70b" in routing.get("model","") else "8B"
                 meta_parts.append(f'<span class="agent-tag">{model_s} ┬╖ score {routing.get("score",0):.2f}</span>')
             if rewritten and rewritten != query:
-                meta_parts.append(f'<span class="agent-tag">rewritten: "{rewritten[:40]}ΓÇª"</span>')
+                # Extract just the first part before any OR operators for cleaner display
+                display_rewritten = rewritten.split(" OR ")[0].strip().strip('"')[:40]
+                if display_rewritten:
+                    meta_parts.append(f'<span class="agent-tag">rewritten: "{display_rewritten}ΓÇª"</span>')
 
             if meta_parts:
                 st.markdown(

@@ -90,7 +90,10 @@ export default function Message({
               fontStyle: 'italic',
               color: '#bbb',
             }}>
-              rewritten: "{rewrittenQuery.slice(0, 45)}{rewrittenQuery.length > 45 ? '…' : ''}"
+              {(() => {
+                const displayQuery = rewrittenQuery.split(' OR ')[0].trim().replace(/"/g, '').slice(0, 45)
+                return `rewritten: "${displayQuery}${rewrittenQuery.length > 45 ? '…' : ''}"`
+              })()}
             </div>
           )}
 

@@ -21,7 +21,17 @@ from backend.router import select_model
 from backend.guardrails import check_guardrails, check_output_guardrails
 from backend.websearch import answer_from_web
 
-nvidia = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
+# Lazy initialization — only create client when needed
+_nvidia_client = None
+
+def get_nvidia_client():
+    """Lazily initialize and return NVIDIA OpenAI client."""
+    global _nvidia_client
+    if _nvidia_client is None:
+        if not NVIDIA_API_KEY:
+            raise RuntimeError("NVIDIA_API_KEY environment variable not set")
+        _nvidia_client = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
+    return _nvidia_client
 
 
 # ── Agent State ───────────────────────────────────────────────────────────────
@@ -107,7 +117,7 @@ Original: {query}
 Rewritten:"""
 
     try:
-        response = nvidia.chat.completions.create(
+        response = get_nvidia_client().chat.completions.create(
             model=LLM_FAST,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=80,
@@ -147,7 +157,7 @@ Query: {query}
 Classification (one word):"""
 
     try:
-        response = nvidia.chat.completions.create(
+        response = get_nvidia_client().chat.completions.create(
             model=LLM_FAST,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=5,
@@ -202,7 +212,7 @@ Question: {query}
 Answer: {answer[:200]}
 Rating (number only):"""
     try:
-        r = nvidia.chat.completions.create(
+        r = get_nvidia_client().chat.completions.create(
             model=LLM_FAST,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=3,
@@ -250,7 +260,7 @@ def simple_agent(state: AgentState) -> AgentState:
         return {**state, "chunks": [], "answer": "I couldn't find relevant information for this question.",
                 "sources": [], "routing": {"model": LLM_FAST, "score": 0.1, "is_complex": False, "agent": "simple"}}
 
-    response = nvidia.chat.completions.create(
+    response = get_nvidia_client().chat.completions.create(
         model=LLM_FAST,
         messages=[{"role": "user", "content":
             f"Answer concisely using only this context. Cite as [Source N].\n\n"
@@ -285,7 +295,7 @@ Cite every claim with [Source N]. State what's missing if insufficient.
 {f'Conversation history:{chr(10)}{history_str}{chr(10)}' if history_str else ''}
 Context:\n{_format_context(chunks)}\n\nQuestion: {state['query']}"""
 
-    response = nvidia.chat.completions.create(
+    response = get_nvidia_client().chat.completions.create(
         model=LLM_POWERFUL,
         messages=[{"role": "user", "content": prompt}],
         max_tokens=800, temperature=0.2,
@@ -314,7 +324,7 @@ Cite all claims with [Source N].
 
 Context:\n{_format_context(chunks)}\n\nComparison request: {state['query']}"""
 
-    response = nvidia.chat.completions.create(
+    response = get_nvidia_client().chat.completions.create(
         model=LLM_POWERFUL,
         messages=[{"role": "user", "content": prompt}],
         max_tokens=700, temperature=0.2,
@@ -345,7 +355,7 @@ Cite document sources as [Source N] when applicable.
 
 History:\n{history_str}\n\nContext:\n{context}\n\nFollow-up: {state['query']}"""
 
-    response = nvidia.chat.completions.create(
+    response = get_nvidia_client().chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": prompt}],
         max_tokens=500, temperature=0.3,
@@ -372,7 +382,7 @@ def no_context_agent(state: AgentState) -> AgentState:
 
     if chunks:
         # Found something despite no_context classification
-        response = nvidia.chat.completions.create(
+        response = get_nvidia_client().chat.completions.create(
             model=LLM_FAST,
             messages=[{"role": "user", "content":
                 f"Answer if relevant context exists, otherwise say what's missing.\n\n"

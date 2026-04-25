@@ -257,8 +257,10 @@ def simple_agent(state: AgentState) -> AgentState:
         collection_name=state.get("collection"),
     )
     if not chunks:
-        return {**state, "chunks": [], "answer": "I couldn't find relevant information for this question.",
-                "sources": [], "routing": {"model": LLM_FAST, "score": 0.1, "is_complex": False, "agent": "simple"}}
+        # Fallback to web search when document has no relevant info
+        web_answer, web_sources = answer_from_web(state["query"])
+        return {**state, "chunks": [], "answer": web_answer,
+                "sources": web_sources, "routing": {"model": LLM_FAST, "score": 0.1, "is_complex": False, "agent": "simple_web_fallback"}}
 
     response = get_nvidia_client().chat.completions.create(
         model=LLM_FAST,
@@ -282,8 +284,10 @@ def complex_agent(state: AgentState) -> AgentState:
         collection_name=state.get("collection"),
     )
     if not chunks:
-        return {**state, "chunks": [], "answer": "Insufficient context for this complex question.",
-                "sources": [], "routing": {"model": LLM_POWERFUL, "score": 0.8, "is_complex": True, "agent": "complex"}}
+        # Fallback to web search when document has no relevant info
+        web_answer, web_sources = answer_from_web(state["query"])
+        return {**state, "chunks": [], "answer": web_answer,
+                "sources": web_sources, "routing": {"model": LLM_POWERFUL, "score": 0.8, "is_complex": True, "agent": "complex_web_fallback"}}
 
     history_str = "\n".join(
         f"{m['role'].title()}: {m['content'][:150]}"
@@ -315,8 +319,10 @@ def comparison_agent(state: AgentState) -> AgentState:
         collection_name=state.get("collection"),
     )
     if not chunks:
-        return {**state, "chunks": [], "answer": "Insufficient context for this comparison.",
-                "sources": [], "routing": {"model": LLM_POWERFUL, "score": 0.7, "is_complex": True, "agent": "comparison"}}
+        # Fallback to web search when document has no relevant info
+        web_answer, web_sources = answer_from_web(state["query"])
+        return {**state, "chunks": [], "answer": web_answer,
+                "sources": web_sources, "routing": {"model": LLM_POWERFUL, "score": 0.7, "is_complex": True, "agent": "comparison_web_fallback"}}
 
     prompt = f"""Create a structured comparison using only the context.
 Format with clear sections for each concept and a 'Key differences' section.

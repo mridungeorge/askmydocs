@@ -1,9 +1,29 @@
 ﻿import streamlit as st
+import os
 from backend.ingest import ingest, extract_from_url, extract_from_pdf
 from backend.cache import get_cached_answer, set_cached_answer, get_cache_stats
 from backend.retrieval import embed_query
 from backend.agents import run_agent
 from backend.logger import log_query
+from backend.guardrails import check_guardrails
+
+# ── Supabase Auth ──────────────────────────────────────────────────────────────
+try:
+    from supabase import create_client
+    from supabase.lib.client_options import ClientOptions
+    
+    supabase_url = st.secrets.get("SUPABASE_URL") or os.getenv("SUPABASE_URL")
+    supabase_key = st.secrets.get("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_SERVICE_KEY")
+    
+    if supabase_url and supabase_key:
+        supabase = create_client(supabase_url, supabase_key)
+        auth_enabled = True
+    else:
+        auth_enabled = False
+        st.warning("⚠️ Supabase not configured. Using demo mode (no auth).")
+except Exception as e:
+    auth_enabled = False
+    st.warning(f"⚠️ Auth unavailable: {str(e)[:50]}. Using demo mode.")
 
 st.set_page_config(
     page_title="AskMyDocs",
@@ -78,13 +98,26 @@ defaults = {
     "ingested":      False,
     "all_sources":   [],
     "source_filter": None,
+    "user_id":       "demo-user",
 }
 for k, v in defaults.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
-# ΓöÇΓöÇ Sidebar ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+# Sidebar
 with st.sidebar:
+    # Auth section
+    st.markdown('<div class="sidebar-mark">Authentication</div>', unsafe_allow_html=True)
+    if auth_enabled:
+        st.info("✅ Authenticated (Supabase configured)")
+        if st.button("Sign out", key="btn_signout"):
+            st.session_state.user_id = "demo-user"
+            st.rerun()
+    else:
+        st.info("🔓 Demo mode (no authentication)")
+    
+    st.markdown("---")
+    
     st.markdown('<div class="sidebar-mark">Document</div>', unsafe_allow_html=True)
     st.markdown('<div class="section-label">Load source</div>', unsafe_allow_html=True)
 
@@ -245,7 +278,19 @@ else:
                 scope   = st.session_state.source_filter or st.session_state.source_name
                 history = [m for m in st.session_state.messages[:-1] if m["role"] in ("user","assistant")]
 
-                # Check cache first
+                # ── Step 1: Check guardrails ──────────────────────────────────────
+                guardrail_result = check_guardrails(query, skip_llm=True)
+                if not guardrail_result.get("allowed", True):
+                    blocked_msg = f"🚫 **Query blocked:** {guardrail_result.get('message', 'Content policy violation')}"
+                    st.error(blocked_msg)
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": blocked_msg,
+                        "blocked": True,
+                    })
+                    st.stop()  # Exit early without returning
+
+                # ── Step 2: Check cache ───────────────────────────────────────────
                 query_vector = embed_query(query)
                 cached = get_cached_answer(query, query_vector)
 
@@ -257,7 +302,9 @@ else:
                     quality     = 1.0
                     rewritten   = query
                     cache_hit   = cached.get("cache_hit", "hit")
+                    blocked     = False
                 else:
+                    # ── Step 3: Run agent ────────────────────────────────────────
                     result      = run_agent(query, scope, history)
                     response    = result["answer"]
                     srcs        = result["sources"]
@@ -266,16 +313,19 @@ else:
                     quality     = result["quality_score"]
                     rewritten   = result["rewritten_query"]
                     cache_hit   = ""
+                    blocked     = result.get("blocked", False)
                     set_cached_answer(query, query_vector, response, srcs, routing)
 
             st.markdown(response)
 
-            # Show metadata
+            # ── Show metadata ─────────────────────────────────────────────────────
             meta_parts = []
             if agent_type:
                 meta_parts.append(f'<span class="agent-tag">{agent_type} agent</span>')
             if cache_hit:
                 meta_parts.append(f'<span class="cache-tag">cache {cache_hit}</span>')
+            if quality and quality < 1.0:
+                meta_parts.append(f'<span class="agent-tag">quality: {quality:.2f}</span>')
             if routing:
                 model_s = "70B" if "70b" in routing.get("model","") else "8B"
                 meta_parts.append(f'<span class="agent-tag">{model_s} ┬╖ score {routing.get("score",0):.2f}</span>')
@@ -300,6 +350,19 @@ else:
                             f'</div>',
                             unsafe_allow_html=True,
                         )
+
+            # ── Store in message history ──────────────────────────────────────────
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": response,
+                "agent_type": agent_type,
+                "cache_hit": cache_hit,
+                "rewritten_query": rewritten,
+                "routing": routing,
+                "quality_score": quality,
+                "sources": srcs,
+                "blocked": blocked,
+            })
 
             log_query(query, scope, len(srcs), len(response))
 

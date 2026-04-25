@@ -15,7 +15,7 @@ START → guardrail_check → [blocked | classify] → route →
 from typing import TypedDict, Literal
 from langgraph.graph import StateGraph, END
 from openai import OpenAI
-from backend.config import NVIDIA_API_KEY, NVIDIA_BASE_URL, LLM_FAST, LLM_POWERFUL
+from backend.config import NVIDIA_API_KEY, NVIDIA_BASE_URL, LLM_POWERFUL, LLM_FAST
 from backend.retrieval import retrieve
 from backend.router import select_model
 from backend.guardrails import check_guardrails, check_output_guardrails

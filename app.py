@@ -6,7 +6,7 @@ from backend.retrieval import embed_query
 from backend.agents import run_agent
 from backend.logger import log_query
 from backend.guardrails import check_guardrails
-from backend.summariser import get_summary
+from backend.summariser import get_summary, generate_summary
 
 st.set_page_config(
     page_title="AskMyDocs",
@@ -107,6 +107,11 @@ with st.sidebar:
                     if title not in st.session_state.all_sources:
                         st.session_state.all_sources.append(title)
                     st.success(f"{n} chunks indexed")
+                    # Generate summary in background
+                    try:
+                        generate_summary(title, text[:4000], max_chunks=10)
+                    except Exception:
+                        pass  # Silently fail on summary generation
                 except Exception as e:
                     st.error(str(e))
 
@@ -123,6 +128,11 @@ with st.sidebar:
                     if title not in st.session_state.all_sources:
                         st.session_state.all_sources.append(title)
                     st.success(f"{n} chunks indexed")
+                    # Generate summary in background
+                    try:
+                        generate_summary(title, text[:4000], max_chunks=10)
+                    except Exception:
+                        pass  # Silently fail on summary generation
                 except Exception as e:
                     st.error(str(e))
 

@@ -102,6 +102,7 @@ defaults = {
     "all_sources":   [],
     "source_filter": None,
     "user_id":       "demo-user",
+    "summaries":     {},  # Cache summaries in session: {doc_title: summary_text}
 }
 for k, v in defaults.items():
     if k not in st.session_state:
@@ -127,9 +128,11 @@ with st.sidebar:
                     if title not in st.session_state.all_sources:
                         st.session_state.all_sources.append(title)
                     st.success(f"{n} chunks indexed")
-                    # Generate and persist summary for sidebar consistency.
+                    # Generate and cache summary in session state
                     try:
                         summary = generate_summary(title, text.split("\n\n")[:10])
+                        st.session_state.summaries[title] = summary
+                        # Also try to persist to Supabase for production
                         save_summary(st.session_state.user_id, title, summary, n)
                     except Exception:
                         pass
@@ -149,9 +152,11 @@ with st.sidebar:
                     if title not in st.session_state.all_sources:
                         st.session_state.all_sources.append(title)
                     st.success(f"{n} chunks indexed")
-                    # Generate and persist summary for sidebar consistency.
+                    # Generate and cache summary in session state
                     try:
                         summary = generate_summary(title, text.split("\n\n")[:10])
+                        st.session_state.summaries[title] = summary
+                        # Also try to persist to Supabase for production
                         save_summary(st.session_state.user_id, title, summary, n)
                     except Exception:
                         pass
@@ -167,15 +172,22 @@ with st.sidebar:
 
         # Display document summary directly below Loaded, matching React layout.
         if st.session_state.ingested and st.session_state.source_name:
-            try:
-                summary = get_summary("demo-user", st.session_state.source_name)
-                if summary:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    st.markdown('<div class="section-label">Summaries</div>', unsafe_allow_html=True)
-                    st.markdown(f"**{st.session_state.source_name}**")
-                    st.caption(summary)
-            except Exception:
-                pass
+            # First check session state (in-memory cache)
+            summary = st.session_state.summaries.get(st.session_state.source_name)
+            
+            # If not in session, try retrieving from Supabase
+            if not summary:
+                try:
+                    summary = get_summary("demo-user", st.session_state.source_name)
+                except Exception:
+                    pass
+            
+            # Display if we have a summary
+            if summary:
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown('<div class="section-label">Summaries</div>', unsafe_allow_html=True)
+                st.markdown(f"**{st.session_state.source_name}**")
+                st.caption(summary)
 
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown('<div class="section-label">Scope</div>', unsafe_allow_html=True)

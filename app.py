@@ -1,16 +1,36 @@
 ﻿import streamlit as st
 import os
+
+# Load keys from Streamlit secrets when env vars are not present (Streamlit Cloud).
+for _key in [
+    "NVIDIA_API_KEY",
+    "QDRANT_URL",
+    "QDRANT_API_KEY",
+    "SUPABASE_URL",
+    "SUPABASE_SERVICE_KEY",
+    "UPSTASH_REDIS_URL",
+    "UPSTASH_REDIS_TOKEN",
+    "TAVILY_API_KEY",
+]:
+    if not os.getenv(_key):
+        try:
+            _value = st.secrets.get(_key)
+            if _value:
+                os.environ[_key] = str(_value)
+        except Exception:
+            pass
+
 from backend.ingest import ingest, extract_from_url, extract_from_pdf
 from backend.cache import get_cached_answer, set_cached_answer, get_cache_stats
 from backend.retrieval import embed_query
 from backend.agents import run_agent
 from backend.logger import log_query
 from backend.guardrails import check_guardrails
-from backend.summariser import get_summary, generate_summary
+from backend.summariser import get_summary, generate_summary, save_summary
 
 st.set_page_config(
     page_title="AskMyDocs",
-    page_icon="Γù╗",
+    page_icon="📄",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -74,7 +94,7 @@ hr { border: none !important; border-top: 1px solid #d8d8d2 !important; margin: 
 </style>
 """, unsafe_allow_html=True)
 
-# ΓöÇΓöÇ Session state ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+# ── Session State ──
 defaults = {
     "messages":      [],
     "source_name":   None,
@@ -97,7 +117,7 @@ with st.sidebar:
     with tab_url:
         url = st.text_input("URL", placeholder="https://...", label_visibility="collapsed")
         if st.button("Index URL", disabled=not url, key="btn_url"):
-            with st.spinner("fetching ┬╖ chunking ┬╖ embedding"):
+            with st.spinner("fetching • chunking • embedding"):
                 try:
                     title, text = extract_from_url(url)
                     n = ingest(title, "url", text)
@@ -107,18 +127,19 @@ with st.sidebar:
                     if title not in st.session_state.all_sources:
                         st.session_state.all_sources.append(title)
                     st.success(f"{n} chunks indexed")
-                    # Generate summary in background
+                    # Generate and persist summary for sidebar consistency.
                     try:
-                        generate_summary(title, text[:4000], max_chunks=10)
+                        summary = generate_summary(title, text.split("\n\n")[:10])
+                        save_summary(st.session_state.user_id, title, summary, n)
                     except Exception:
-                        pass  # Silently fail on summary generation
+                        pass
                 except Exception as e:
                     st.error(str(e))
 
     with tab_pdf:
         pdf = st.file_uploader("PDF", type=["pdf"], label_visibility="collapsed")
         if st.button("Index PDF", disabled=not pdf, key="btn_pdf"):
-            with st.spinner("reading ┬╖ chunking ┬╖ embedding"):
+            with st.spinner("reading • chunking • embedding"):
                 try:
                     title, text = extract_from_pdf(pdf.read(), pdf.name)
                     n = ingest(title, "pdf", text)
@@ -128,11 +149,12 @@ with st.sidebar:
                     if title not in st.session_state.all_sources:
                         st.session_state.all_sources.append(title)
                     st.success(f"{n} chunks indexed")
-                    # Generate summary in background
+                    # Generate and persist summary for sidebar consistency.
                     try:
-                        generate_summary(title, text[:4000], max_chunks=10)
+                        summary = generate_summary(title, text.split("\n\n")[:10])
+                        save_summary(st.session_state.user_id, title, summary, n)
                     except Exception:
-                        pass  # Silently fail on summary generation
+                        pass
                 except Exception as e:
                     st.error(str(e))
 
@@ -140,8 +162,20 @@ with st.sidebar:
         st.markdown("---")
         st.markdown('<div class="section-label">Loaded</div>', unsafe_allow_html=True)
         for doc in st.session_state.all_sources:
-            short = doc[:34] + "ΓÇª" if len(doc) > 34 else doc
+            short = doc[:34] + "..." if len(doc) > 34 else doc
             st.markdown(f'<div class="doc-pill">{short}</div>', unsafe_allow_html=True)
+
+        # Display document summary directly below Loaded, matching React layout.
+        if st.session_state.ingested and st.session_state.source_name:
+            try:
+                summary = get_summary("demo-user", st.session_state.source_name)
+                if summary:
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    st.markdown('<div class="section-label">Summaries</div>', unsafe_allow_html=True)
+                    st.markdown(f"**{st.session_state.source_name}**")
+                    st.caption(summary)
+            except Exception:
+                pass
 
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown('<div class="section-label">Scope</div>', unsafe_allow_html=True)
@@ -151,18 +185,6 @@ with st.sidebar:
             label_visibility="collapsed",
         )
         st.session_state.source_filter = None if selected == "All documents" else selected
-
-        # Display document summary if loaded
-        if st.session_state.ingested and st.session_state.source_name:
-            try:
-                summary = get_summary("demo-user", st.session_state.source_name)
-                if summary:
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    st.markdown('<div class="section-label">Summary</div>', unsafe_allow_html=True)
-                    st.caption(summary)
-            except Exception:
-                # Silently skip summary on error (e.g., NVIDIA_API_KEY not set)
-                pass
 
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("""
@@ -235,12 +257,12 @@ else:
                 if msg.get("routing"):
                     r = msg["routing"]
                     model_s = "70B" if "70b" in r.get("model","") else "8B"
-                    meta_parts.append(f'<span class="agent-tag">{model_s} ┬╖ score {r.get("score",0):.2f}</span>')
+                    meta_parts.append(f'<span class="agent-tag">{model_s} • score {r.get("score",0):.2f}</span>')
                 if msg.get("rewritten_query") and msg["rewritten_query"] != msg.get("original_query"):
                     # Extract just the first part before any OR operators for cleaner display
                     display_rewritten = msg["rewritten_query"].split(" OR ")[0].strip().strip('"')[:40]
                     if display_rewritten:
-                        meta_parts.append(f'<span class="agent-tag">rewritten: "{display_rewritten}ΓÇª"</span>')
+                        meta_parts.append(f'<span class="agent-tag">rewritten: "{display_rewritten}..."</span>')
 
                 if meta_parts:
                     st.markdown(
@@ -270,7 +292,7 @@ else:
             st.markdown(query)
 
         with st.chat_message("assistant"):
-            with st.spinner("classifying ┬╖ routing ┬╖ retrieving ┬╖ generating"):
+            with st.spinner("classifying • routing • retrieving • generating"):
                 scope   = st.session_state.source_filter or st.session_state.source_name
                 history = [m for m in st.session_state.messages[:-1] if m["role"] in ("user","assistant")]
 
@@ -324,12 +346,12 @@ else:
                 meta_parts.append(f'<span class="agent-tag">quality: {quality:.2f}</span>')
             if routing:
                 model_s = "70B" if "70b" in routing.get("model","") else "8B"
-                meta_parts.append(f'<span class="agent-tag">{model_s} ┬╖ score {routing.get("score",0):.2f}</span>')
+                meta_parts.append(f'<span class="agent-tag">{model_s} • score {routing.get("score",0):.2f}</span>')
             if rewritten and rewritten != query:
                 # Extract just the first part before any OR operators for cleaner display
                 display_rewritten = rewritten.split(" OR ")[0].strip().strip('"')[:40]
                 if display_rewritten:
-                    meta_parts.append(f'<span class="agent-tag">rewritten: "{display_rewritten}ΓÇª"</span>')
+                    meta_parts.append(f'<span class="agent-tag">rewritten: "{display_rewritten}..."</span>')
 
             if meta_parts:
                 st.markdown(

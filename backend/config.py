@@ -3,18 +3,44 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def _resolve_setting(key: str, default: str | None = None) -> str | None:
+	"""Resolve a config setting from env, then Streamlit secrets as fallback."""
+	env_val = os.getenv(key)
+	if env_val not in (None, ""):
+		return env_val
+
+	try:
+		import streamlit as st  # Optional dependency when running non-Streamlit entrypoints.
+
+		# Top-level key in secrets.toml
+		if key in st.secrets:
+			val = st.secrets[key]
+			return str(val) if val is not None else default
+
+		# Nested keys, e.g. [env] NVIDIA_API_KEY="..."
+		for _, section in st.secrets.items():
+			if hasattr(section, "get"):
+				nested_val = section.get(key)
+				if nested_val not in (None, ""):
+					return str(nested_val)
+	except Exception:
+		pass
+
+	return default
+
 # ── Development Mode ──────────────────────────────────────────────────────────
 DEBUG_MODE = os.getenv("DEBUG_MODE", "true").lower() == "true"
 
 # ── API Keys ──────────────────────────────────────────────────────────────────
-NVIDIA_API_KEY       = os.getenv("NVIDIA_API_KEY")
-QDRANT_URL           = os.getenv("QDRANT_URL")
-QDRANT_API_KEY       = os.getenv("QDRANT_API_KEY")
-SUPABASE_URL         = os.getenv("SUPABASE_URL")
-SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
-UPSTASH_REDIS_URL    = os.getenv("UPSTASH_REDIS_URL", "")
-UPSTASH_REDIS_TOKEN  = os.getenv("UPSTASH_REDIS_TOKEN", "")
-TAVILY_API_KEY       = os.getenv("TAVILY_API_KEY", "")
+NVIDIA_API_KEY       = _resolve_setting("NVIDIA_API_KEY")
+QDRANT_URL           = _resolve_setting("QDRANT_URL")
+QDRANT_API_KEY       = _resolve_setting("QDRANT_API_KEY")
+SUPABASE_URL         = _resolve_setting("SUPABASE_URL")
+SUPABASE_SERVICE_KEY = _resolve_setting("SUPABASE_SERVICE_KEY")
+UPSTASH_REDIS_URL    = _resolve_setting("UPSTASH_REDIS_URL", "")
+UPSTASH_REDIS_TOKEN  = _resolve_setting("UPSTASH_REDIS_TOKEN", "")
+TAVILY_API_KEY       = _resolve_setting("TAVILY_API_KEY", "")
 
 # ── Models ────────────────────────────────────────────────────────────────────
 EMBED_MODEL   = "nvidia/nv-embedqa-e5-v5"

@@ -20,6 +20,252 @@ for _key in [
         except Exception:
             pass
 
+from datetime import datetime
+import time
+
+from backend.ingest import ingest, extract_from_url, extract_from_pdf, make_chunks
+from backend.cache import get_cached_answer, set_cached_answer
+from backend.retrieval import embed_query, retrieve
+from backend.agents import run_agent
+from backend.logger import log_query
+from backend.observability import log_query_full
+from backend.guardrails import check_guardrails
+from backend.summariser import generate_summary, save_summary
+from backend.graph_rag import build_graph_for_collection, graph_retrieve
+from backend.raptor import build_raptor_tree, get_raptor_context, build_corpus_summary
+from backend.structured_outputs import detect_output_type, generate_structured_answer
+from backend.collaboration import create_session
+
+st.set_page_config(page_title="AskMyDocs", page_icon="◻", layout="wide", initial_sidebar_state="expanded")
+
+st.markdown(
+    """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+:root { --bg:#0f1115; --panel:#171a21; --border:#2f3647; --text:#f4f7fb; --muted:#a6b0c3; --accent:#7ee787; --accent2:#5eead4; }
+*,*::before,*::after{box-sizing:border-box;}
+html,body,[data-testid="stAppViewContainer"]{background:var(--bg)!important;color:var(--text)!important;font-family:'Inter',sans-serif!important;}
+#MainMenu,footer,header,[data-testid="stToolbar"],[data-testid="stDecoration"],[data-testid="stStatusWidget"]{display:none!important;}
+[data-testid="stSidebar"]{background:rgba(23,26,33,.96)!important;border-right:1px solid var(--border)!important;}
+[data-testid="stSidebar"]>div{padding-top:1rem;}
+.block-container{padding:0!important;max-width:100%!important;}
+.hero{min-height:72vh;display:grid;place-items:center;padding:4rem 1.2rem;}
+.hero-card{width:min(920px,100%);background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:28px;padding:2rem;box-shadow:0 24px 80px rgba(0,0,0,.25);}
+.hero-kicker{color:var(--accent);text-transform:uppercase;letter-spacing:.18em;font-size:.72rem;margin-bottom:.8rem;}
+.hero-title{font-size:clamp(2.2rem,4vw,4rem);line-height:1.02;margin:0 0 .8rem;}
+.hero-sub{color:var(--muted);font-size:1rem;max-width:58ch;line-height:1.7;}
+.feature-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.9rem;margin-top:1.6rem;}
+.feature{background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:18px;padding:1rem;}
+.feature h4{margin:0 0 .35rem;font-size:.98rem;}.feature p{margin:0;color:var(--muted);font-size:.88rem;line-height:1.5;}
+.chat-wrap{width:min(960px,100%);margin:0 auto;padding:1.2rem 1rem 8rem;}.chat-shell{background:rgba(23,26,33,.9);border:1px solid var(--border);border-radius:28px;padding:1.25rem;}
+.sidebar-section{color:var(--muted);text-transform:uppercase;letter-spacing:.16em;font-size:.68rem;margin:1rem 0 .4rem;}
+.summary-card{color:var(--muted);font-size:.86rem;line-height:1.5;padding:.65rem .75rem;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:12px;margin:.45rem 0 .7rem;}
+.doc-item{padding:.55rem .75rem;border-radius:12px;border:1px solid transparent;} .doc-item:hover{background:rgba(255,255,255,.03);border-color:var(--border);}
+.meta-row{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.6rem;}.meta-badge{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:999px;padding:.18rem .55rem;font-size:.72rem;color:var(--muted);}
+[data-testid="stChatMessage"]{background:transparent!important;border:none!important;max-width:100%;}
+[data-testid="stChatMessage"] [data-testid="stMarkdownContainer"]{color:var(--text)!important;line-height:1.7!important;}
+[data-testid="stChatInput"]{border:1px solid var(--border)!important;background:rgba(255,255,255,.03)!important;border-radius:22px!important;}
+@media (max-width:768px){.hero{min-height:auto;padding:1rem;}.hero-card,.chat-shell{border-radius:20px;padding:1rem;}}
+</style>
+""",
+    unsafe_allow_html=True,
+)
+
+defaults = {
+    "user_id": "local_user",
+    "messages": [],
+    "source_name": None,
+    "all_sources": [],
+    "source_filter": None,
+    "summaries": {},
+    "use_graph_rag": False,
+    "use_structured": True,
+    "collab_session": None,
+}
+for key, value in defaults.items():
+    st.session_state.setdefault(key, value)
+
+
+def _reset_chat() -> None:
+    st.session_state.messages = []
+    st.session_state.source_name = None
+    st.session_state.source_filter = None
+
+
+def _ingest_document(title: str, source_type: str, text: str) -> None:
+    chunk_count = ingest(title, source_type, text)
+    chunks = make_chunks(title, source_type, text)
+    summary = generate_summary(title, chunks)
+    save_summary(st.session_state.user_id, title, summary, chunk_count)
+    st.session_state.source_name = title
+    st.session_state.source_filter = title
+    if title not in st.session_state.all_sources:
+        st.session_state.all_sources.append(title)
+    st.session_state.summaries[title] = summary
+    try:
+        build_graph_for_collection(st.session_state.user_id, st.session_state.user_id, chunks)
+    except Exception:
+        pass
+    try:
+        build_raptor_tree(st.session_state.user_id, title, chunks)
+        build_corpus_summary(st.session_state.user_id)
+    except Exception:
+        pass
+    st.session_state.messages = [{"role": "assistant", "content": f"Indexed {chunk_count} chunks from {title}."}]
+
+
+with st.sidebar:
+    st.markdown('<div class="sidebar-section">AskMyDocs</div>', unsafe_allow_html=True)
+    if st.button("New chat", use_container_width=True):
+        _reset_chat()
+        st.rerun()
+
+    st.markdown('<div class="sidebar-section">Load document</div>', unsafe_allow_html=True)
+    tab_url, tab_pdf = st.tabs(["URL", "PDF"])
+    with tab_url:
+        url = st.text_input("URL", placeholder="https://…", label_visibility="collapsed")
+        if st.button("Load URL", use_container_width=True, disabled=not url):
+            with st.spinner("Loading document…"):
+                title, text = extract_from_url(url)
+                _ingest_document(title, "url", text)
+                st.success(f"Loaded {title}")
+    with tab_pdf:
+        pdf = st.file_uploader("PDF", type=["pdf"], label_visibility="collapsed")
+        if st.button("Load PDF", use_container_width=True, disabled=not pdf):
+            with st.spinner("Reading PDF…"):
+                title, text = extract_from_pdf(pdf.read(), pdf.name)
+                _ingest_document(title, "pdf", text)
+                st.success(f"Loaded {title}")
+
+    if st.session_state.all_sources:
+        st.markdown('<div class="sidebar-section">Documents</div>', unsafe_allow_html=True)
+        selected = st.selectbox("Scope", ["All documents"] + st.session_state.all_sources, label_visibility="collapsed")
+        st.session_state.source_filter = None if selected == "All documents" else selected
+        for doc in st.session_state.all_sources:
+            st.markdown(f'<div class="doc-item">{doc}</div>', unsafe_allow_html=True)
+            if st.session_state.summaries.get(doc):
+                st.markdown(f'<div class="summary-card">{st.session_state.summaries[doc]}</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="sidebar-section">Settings</div>', unsafe_allow_html=True)
+    st.session_state.use_graph_rag = st.toggle("Graph RAG", value=st.session_state.use_graph_rag)
+    st.session_state.use_structured = st.toggle("Structured outputs", value=st.session_state.use_structured)
+
+    st.markdown('<div class="sidebar-section">Collaboration</div>', unsafe_allow_html=True)
+    if st.button("Create session", use_container_width=True):
+        try:
+            session = create_session(st.session_state.user_id, st.session_state.source_name or "document")
+            st.session_state.collab_session = session
+            st.success(f"Code: {session['session_code']}")
+        except Exception as exc:
+            st.error(str(exc))
+
+
+if not st.session_state.source_name and not st.session_state.messages:
+    st.markdown(
+        """
+        <div class="hero">
+          <div class="hero-card">
+            <div class="hero-kicker">AskMyDocs v6</div>
+            <h1 class="hero-title">Document Q&A, built for deep retrieval.</h1>
+            <p class="hero-sub">Load a PDF or URL, then ask questions with Graph RAG, RAPTOR summaries, structured outputs, collaboration sessions, and observability in separate dashboard pages.</p>
+            <div class="feature-grid">
+              <div class="feature"><h4>Graph RAG</h4><p>Multi-hop reasoning across entities and relations.</p></div>
+              <div class="feature"><h4>RAGAS</h4><p>Track faithfulness, relevancy, recall, and precision.</p></div>
+              <div class="feature"><h4>Structured outputs</h4><p>Render comparisons, metrics, timelines, and lists.</p></div>
+              <div class="feature"><h4>Collaboration</h4><p>Share a live session code with your team.</p></div>
+            </div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.stop()
+
+
+st.markdown('<div class="chat-wrap"><div class="chat-shell">', unsafe_allow_html=True)
+if st.session_state.collab_session:
+    st.caption(f"Live session: {st.session_state.collab_session.get('session_code', '')}")
+
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message.get("content", ""))
+
+st.markdown('</div></div>', unsafe_allow_html=True)
+
+query = st.chat_input("Ask anything about your document…")
+if query:
+    st.session_state.messages.append({"role": "user", "content": query})
+    with st.chat_message("user"):
+        st.markdown(query)
+
+    guard = check_guardrails(query, st.session_state.source_name)
+    if not guard.get("allowed", True):
+        with st.chat_message("assistant"):
+            st.warning(guard.get("message", "Blocked by guardrails."))
+        st.session_state.messages.append({"role": "assistant", "content": guard.get("message", "Blocked by guardrails.")})
+        st.stop()
+
+    start = time.time()
+    scope = st.session_state.source_filter or st.session_state.source_name
+    history = st.session_state.messages[:-1]
+    query_vector = embed_query(query)
+    cached = get_cached_answer(query, query_vector)
+
+    if cached:
+        response = cached.get("answer", "")
+        sources = cached.get("sources", [])
+        routing = cached.get("routing", {})
+        agent_type = "cached"
+        rewritten_query = query
+        quality_score = 1.0
+    else:
+        raptor_context = get_raptor_context(st.session_state.user_id, query, scope)
+        result = run_agent(query, scope, history, collection=st.session_state.user_id, doc_context=raptor_context)
+        response = result["answer"]
+        sources = result["sources"]
+        routing = result.get("routing", {})
+        agent_type = result.get("agent_type", "unknown")
+        rewritten_query = result.get("rewritten_query", query)
+        quality_score = result.get("quality_score", 0.0)
+
+        if st.session_state.use_graph_rag and sources:
+            try:
+                all_chunks = retrieve(query, scope, history, collection_name=st.session_state.user_id)
+                for chunk in graph_retrieve(query, st.session_state.user_id, st.session_state.user_id, all_chunks)[:2]:
+                    sources.append({"name": chunk.payload.get("source_name", scope or "document"), "snippet": chunk.payload.get("text", "")[:180], "type": "graph"})
+            except Exception:
+                pass
+
+        output_type = detect_output_type(query) if st.session_state.use_structured else "standard"
+        if output_type != "standard" and sources:
+            context_text = "\n\n".join(f"[Source {i + 1}] {src.get('snippet', '')}" for i, src in enumerate(sources[:5]))
+            structured = generate_structured_answer(query, context_text, output_type, history)
+            response = structured.get("answer", response)
+
+        set_cached_answer(query, query_vector, response, sources, routing)
+        log_query(query, scope, len(sources), len(response))
+        log_query_full(st.session_state.user_id, query, rewritten_query, agent_type, routing.get("model", ""), int((time.time() - start) * 1000), len(sources), quality_score, "", False, scope)
+
+    with st.chat_message("assistant"):
+        st.markdown(response)
+        badges = [agent_type]
+        if cached:
+            badges.append("cache hit")
+        if routing.get("model"):
+            badges.append(routing.get("model"))
+        if st.session_state.use_structured:
+            badges.append(detect_output_type(query))
+        st.markdown('<div class="meta-row">' + ''.join(f'<span class="meta-badge">{badge}</span>' for badge in badges) + '</div>', unsafe_allow_html=True)
+        if sources:
+            with st.expander(f"Sources ({len(sources)})"):
+                for idx, source in enumerate(sources, start=1):
+                    st.markdown(f"**[{idx}] {source.get('name', 'Source')}**")
+                    st.caption(source.get("snippet", ""))
+
+    st.session_state.messages.append({"role": "assistant", "content": response})
+
+st.stop()
+
 from backend.ingest import ingest, extract_from_url, extract_from_pdf
 from backend.cache import get_cached_answer, set_cached_answer, get_cache_stats
 from backend.retrieval import embed_query

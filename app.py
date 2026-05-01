@@ -208,9 +208,12 @@ if query:
     # Check if collection exists (i.e., documents have been uploaded)
     try:
         from backend.retrieval import get_qdrant_client
+        from backend.config import COLLECTION_NAME
         client = get_qdrant_client()
         existing_collections = [c.name for c in client.get_collections().collections]
-        collection_to_check = st.session_state.user_id or "askmydocs"
+        
+        # Use the same collection logic as in agents/retrieval
+        collection_to_check = st.session_state.user_id if st.session_state.user_id != "local_user" else COLLECTION_NAME
         
         if collection_to_check not in existing_collections:
             with st.chat_message("assistant"):

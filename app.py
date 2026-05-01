@@ -205,6 +205,21 @@ if query:
         st.session_state.messages.append({"role": "assistant", "content": guard.get("message", "Blocked by guardrails.")})
         st.stop()
 
+    # Check if collection exists (i.e., documents have been uploaded)
+    try:
+        from backend.retrieval import get_qdrant_client
+        client = get_qdrant_client()
+        existing_collections = [c.name for c in client.get_collections().collections]
+        collection_to_check = st.session_state.user_id or "askmydocs"
+        
+        if collection_to_check not in existing_collections:
+            with st.chat_message("assistant"):
+                st.warning("📄 No documents uploaded yet. Please upload a PDF or provide a URL in the sidebar to get started.")
+            st.session_state.messages.append({"role": "assistant", "content": "No documents uploaded yet. Please upload a PDF or provide a URL to get started."})
+            st.stop()
+    except Exception as e:
+        st.warning(f"⚠️ Could not verify documents: {str(e)}")
+    
     start = time.time()
     scope = st.session_state.source_filter or st.session_state.source_name
     history = st.session_state.messages[:-1]

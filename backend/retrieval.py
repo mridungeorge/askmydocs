@@ -77,6 +77,21 @@ def ann_search(
     collection_name: str = None,
 ) -> list:
     collection_name = collection_name or COLLECTION_NAME
+    
+    # Check if collection exists before querying
+    try:
+        client = get_qdrant_client()
+        existing_collections = [c.name for c in client.get_collections().collections]
+        
+        if collection_name not in existing_collections:
+            # Return empty list instead of raising error - collection not yet created
+            return []
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Could not check Qdrant collections: {str(e)}")
+        # Continue anyway, might be a transient error
+    
     filter_ = None
     if source_name:
         filter_ = Filter(must=[
@@ -96,7 +111,8 @@ def ann_search(
         logger = logging.getLogger(__name__)
         logger.error(f"Qdrant query failed: {str(e)}", exc_info=True)
         logger.error(f"Collection: {collection_name}, QDRANT_URL: {QDRANT_URL}")
-        raise
+        # Return empty results instead of crashing
+        return []
 
 
 def tokenise(text: str) -> list[str]:

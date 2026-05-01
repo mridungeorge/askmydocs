@@ -82,13 +82,21 @@ def ann_search(
         filter_ = Filter(must=[
             FieldCondition(key="source_name", match=MatchValue(value=source_name))
         ])
-    return get_qdrant_client().query_points(
-        collection_name=collection_name,
-        query=query_vector,
-        limit=top_k,
-        query_filter=filter_,
-        with_payload=True,
-    ).points
+    
+    try:
+        return get_qdrant_client().query_points(
+            collection_name=collection_name,
+            query=query_vector,
+            limit=top_k,
+            query_filter=filter_,
+            with_payload=True,
+        ).points
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Qdrant query failed: {str(e)}", exc_info=True)
+        logger.error(f"Collection: {collection_name}, QDRANT_URL: {QDRANT_URL}")
+        raise
 
 
 def tokenise(text: str) -> list[str]:

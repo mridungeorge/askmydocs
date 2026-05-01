@@ -113,7 +113,7 @@ GRANT ALL PRIVILEGES ON TABLE eval_scores TO authenticated;
 -- Views for Dashboard Analytics
 -- ──────────────────────────────────────────────────────────────────────────
 
-CREATE OR REPLACE VIEW query_metrics_7day AS
+CREATE OR REPLACE VIEW query_metrics_7day WITH (SECURITY_INVOKER) AS
 SELECT
   user_id,
   COUNT(*) as total_queries,

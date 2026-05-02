@@ -12,9 +12,10 @@ export default function Message({
     comparison: '#7a5a3a',
     followup:   '#3a7a5a',
     no_context: '#7a3a3a',
-    web_search: '#3a7a7a',
-    cached:     '#5a7a3a',
-    guardrail:  '#7a3a3a',
+    web_search: '#0084ff',
+    cached:     '#31a24c',
+    guardrail:  '#c53030',
+    stream:     '#7a5a3a',
   }
   const agentColor = agentColors[agentType] || '#aaa'
   const modelLabel = routing?.model?.includes('70b') ? '70B' : routing?.model === 'none' ? '—' : '8B'
@@ -43,27 +44,28 @@ export default function Message({
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 10, flexWrap: 'wrap' }}>
 
           {/* Agent type badge */}
-          {agentType && agentType !== 'cached' && (
+          {agentType && (
             <div style={{
               fontFamily: 'var(--serif)',
               fontSize: 10,
               fontStyle: 'italic',
               color: agentColor,
+              fontWeight: agentType === 'web_search' || agentType === 'cached' ? 600 : 400,
             }}>
-              {agentType} agent
+              {agentType === 'web_search' ? '🌐 web' : agentType === 'cached' ? '⚡ cached' : agentType + ' agent'}
             </div>
           )}
 
           {/* Cache hit badge */}
-          {cacheHit && (
+          {cacheHit && agentType !== 'cached' && (
             <div style={{
               fontFamily: 'var(--sans)',
               fontSize: 10,
               fontWeight: 300,
               letterSpacing: '0.15em',
               textTransform: 'uppercase',
-              color: '#3a7a3a',
-              border: '1px solid #3a7a3a',
+              color: '#31a24c',
+              border: '1px solid #31a24c',
               padding: '2px 6px',
             }}>
               cache {cacheHit}

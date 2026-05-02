@@ -215,6 +215,19 @@ async def chat(
             collection=collection,
         )
 
+        # Step 3.5: Fallback to web search if no sources found
+        if not result["sources"] and result["agent_type"] != "cached":
+            try:
+                from backend.websearch import answer_from_web
+                web_answer, web_sources = answer_from_web(request.query)
+                if web_sources:
+                    result["answer"] = web_answer
+                    result["sources"] = web_sources
+                    result["agent_type"] = "web_search"
+                    print(f"[DEBUG] Fallback to web search completed, found {len(web_sources)} sources")
+            except Exception as e:
+                print(f"[DEBUG] Web search fallback failed: {str(e)}")
+
         # Step 4: Write to cache
         set_cached_answer(
             query=request.query,
@@ -304,8 +317,27 @@ async def chat_stream(
                 )
                 print(f"[DEBUG] Agent completed, blocked={result.get('blocked', False)}")
 
-                # Step 5: Stream answer token by token
+                # Step 4.5: Fallback to web search if no sources found
                 answer = result.get("answer", "No answer generated")
+                agent_type = result.get("agent_type", "")
+                sources = result.get("sources", [])
+                
+                if not sources and agent_type != "cached":
+                    try:
+                        from backend.websearch import answer_from_web
+                        web_answer, web_sources = answer_from_web(request.query)
+                        if web_sources:
+                            answer = web_answer
+                            sources = web_sources
+                            agent_type = "web_search"
+                            result["answer"] = answer
+                            result["sources"] = sources
+                            result["agent_type"] = agent_type
+                            print(f"[DEBUG] Fallback to web search completed, found {len(web_sources)} sources")
+                    except Exception as e:
+                        print(f"[DEBUG] Web search fallback failed: {str(e)}")
+
+                # Step 5: Stream answer token by token
                 for word in answer.split():
                     token_data = json.dumps({"type": "token", "content": word + " "})
                     yield f'data: {token_data}\n\n'
@@ -316,7 +348,7 @@ async def chat_stream(
                 
                 # Convert sources to JSON-serializable format
                 sources_list = []
-                for s in result.get("sources", []):
+                for s in sources:
                     if isinstance(s, dict):
                         sources_list.append({
                             "name": s.get("name", ""),
@@ -330,7 +362,7 @@ async def chat_stream(
                     "type": "done",
                     "sources": sources_list,
                     "routing": result.get("routing", {}),
-                    "agent_type": result.get("agent_type", ""),
+                    "agent_type": agent_type,
                     "quality_score": result.get("quality_score", 0.0),
                     "cache_hit": "no",
                     "latency_ms": latency_ms,
@@ -343,7 +375,7 @@ async def chat_stream(
                     query=request.query,
                     query_vector=query_vector,
                     answer=answer,
-                    sources=result.get("sources", []),
+                    sources=sources,
                     routing=result.get("routing", {}),
                 )
 
@@ -355,10 +387,10 @@ async def chat_stream(
                     user_id=user_id,
                     query=request.query,
                     rewritten=result.get("rewritten_query", ""),
-                    agent_type=result.get("agent_type", ""),
+                    agent_type=agent_type,
                     model_used=result.get("routing", {}).get("model", ""),
                     latency_ms=latency_ms,
-                    chunk_count=len(result.get("sources", [])),
+                    chunk_count=len(sources),
                     quality_score=result.get("quality_score", 0.0),
                     cache_hit="no",
                     guardrail_hit=result.get("blocked", False),

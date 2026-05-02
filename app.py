@@ -35,6 +35,7 @@ from backend.graph_rag import build_graph_for_collection, graph_retrieve
 from backend.raptor import build_raptor_tree, get_raptor_context, build_corpus_summary
 from backend.structured_outputs import detect_output_type, generate_structured_answer
 from backend.collaboration import create_session
+from backend.websearch import answer_from_web
 
 st.set_page_config(page_title="AskMyDocs", page_icon="◻", layout="wide", initial_sidebar_state="expanded")
 
@@ -259,6 +260,21 @@ if query:
         rewritten_query = query
         quality_score = 1.0
     else:
+        # Show loading animation while processing
+        with st.chat_message("assistant"):
+            col1, col2, col3 = st.columns([1, 1, 1])
+            with col2:
+                st.markdown("""
+                <style>
+                @keyframes dots { 0%, 20%, 50%, 80%, 100% { opacity: 1; } 40% { opacity: 0.3; } 60% { opacity: 0.7; } }
+                .loading-dots { font-size: 1.5rem; letter-spacing: 0.2em; animation: dots 1.4s infinite; }
+                .loading-text { font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; text-align: center; }
+                </style>
+                <div class="loading-dots">● ● ●</div>
+                <div class="loading-text">classifying · retrieving · generating</div>
+                """, unsafe_allow_html=True)
+            loading_placeholder = st.empty()
+        
         raptor_context = get_raptor_context(st.session_state.user_id, query, scope)
         result = run_agent(query, scope, history, collection=st.session_state.user_id, doc_context=raptor_context)
         response = result["answer"]
@@ -267,6 +283,19 @@ if query:
         agent_type = result.get("agent_type", "unknown")
         rewritten_query = result.get("rewritten_query", query)
         quality_score = result.get("quality_score", 0.0)
+
+        # If no sources found, try web search
+        if not sources and agent_type != "cached":
+            try:
+                from backend.websearch import answer_from_web
+                web_response, web_sources = answer_from_web(query)
+                if web_sources:
+                    response = web_response
+                    sources = web_sources
+                    agent_type = "web_search"
+                    loading_placeholder.empty()
+            except Exception as e:
+                pass
 
         if st.session_state.use_graph_rag and sources:
             try:
@@ -285,12 +314,17 @@ if query:
         set_cached_answer(query, query_vector, response, sources, routing)
         log_query(query, scope, len(sources), len(response))
         log_query_full(st.session_state.user_id, query, rewritten_query, agent_type, routing.get("model", ""), int((time.time() - start) * 1000), len(sources), quality_score, "", False, scope)
+        
+        # Clear loading animation and show response
+        loading_placeholder.empty()
 
     with st.chat_message("assistant"):
         st.markdown(response)
         badges = [agent_type]
         if cached:
             badges.append("cache hit")
+        if agent_type == "web_search":
+            badges.append("web search")
         if routing.get("model"):
             badges.append(routing.get("model"))
         if st.session_state.use_structured:

@@ -36,10 +36,20 @@ user_id = st.session_state.get("user_id", "")
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,300;1,300&family=Noto+Sans+JP:wght@300;400&display=swap');
-html, body, [data-testid="stAppViewContainer"] { background: #fafaf8 !important; font-family: 'Noto Sans JP', sans-serif !important; font-weight: 300 !important; }
+html, body, [data-testid="stAppViewContainer"] { background: #ffffff !important; font-family: 'Noto Sans JP', sans-serif !important; font-weight: 300 !important; color: #1c1e21 !important; }
 #MainMenu, footer, header, [data-testid="stToolbar"] { display: none !important; }
-.block-container { padding: 48px 72px !important; max-width: 100% !important; }
-h1, h2, h3 { font-family: 'Noto Serif', serif !important; font-weight: 300 !important; letter-spacing: -0.02em !important; }
+.block-container { padding: 1.5rem 1.2rem !important; max-width: 100% !important; }
+h1, h2, h3 { font-family: 'Noto Serif', serif !important; font-weight: 300 !important; letter-spacing: -0.02em !important; color: #1c1e21 !important; }
+[data-testid="stMetric"] { background: #f8f9fa !important; border: 1px solid #e0e2e6 !important; border-radius: 12px !important; }
+[data-testid="stMetricValue"] { color: #31a24c !important; font-weight: 600; }
+[data-testid="stSelectbox"] > div > button { border: 1px solid #e0e2e6 !important; border-radius: 8px !important; }
+@media (max-width:768px){
+  .block-container { padding: 0.8rem !important; }
+}
+@media (max-width:480px){
+  .block-container { padding: 0.5rem !important; }
+  h1 { font-size: 24px !important; }
+}
 </style>
 """, unsafe_allow_html=True)
 

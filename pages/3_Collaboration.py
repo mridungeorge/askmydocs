@@ -19,13 +19,21 @@ if "collab_messages" not in st.session_state:
 st.markdown(
     """
     <style>
-    html, body, [data-testid="stAppViewContainer"] { background: #0f1115 !important; color: #f4f7fb !important; }
+    html, body, [data-testid="stAppViewContainer"] { background: #ffffff !important; color: #1c1e21 !important; }
     #MainMenu, footer, header, [data-testid="stToolbar"] { display: none !important; }
-    .block-container { padding: 2rem !important; max-width: 960px !important; }
-    .session-code { font-size: 2rem; font-weight: 700; letter-spacing: .2em; color: #7ee787; background: #171a21; border: 1px solid #2f3647; padding: 1rem; text-align: center; border-radius: 16px; }
-    .msg-user { background: #171a21; border: 1px solid #2f3647; border-radius: 16px; padding: .9rem 1rem; margin: .7rem 0; }
-    .msg-assistant { padding: .3rem 0 .9rem; margin: .7rem 0; }
-    .msg-meta { font-size: .72rem; color: #a6b0c3; margin-bottom: .3rem; }
+    .block-container { padding: 1rem 1.2rem 2rem !important; max-width: 960px !important; }
+    .session-code { font-size: 1.8rem; font-weight: 700; letter-spacing: .15em; color: #0084ff; background: #f8f9fa; border: 1px solid #e0e2e6; padding: 1.2rem; text-align: center; border-radius: 12px; }
+    .msg-user { background: #f0f2f6; border: 1px solid #e0e2e6; border-radius: 12px; padding: 1rem; margin: 0.8rem 0; }
+    .msg-assistant { padding: 0.5rem 0 1rem; margin: 0.8rem 0; }
+    .msg-meta { font-size: 0.8rem; color: #65676b; margin-bottom: 0.5rem; }
+    [data-testid="stButton"] button { border-radius: 8px !important; font-weight: 500; }
+    [data-testid="stTextInput"] input { border: 1px solid #e0e2e6 !important; border-radius: 8px !important; }
+    h1, h2, h3, h4, h5, h6 { color: #1c1e21 !important; }
+    .stCaption { color: #65676b !important; }
+    @media (max-width:768px){
+      .block-container { padding: 0.8rem !important; }
+      .session-code { font-size: 1.4rem; padding: 1rem; }
+    }
     </style>
     """,
     unsafe_allow_html=True,

@@ -32,13 +32,21 @@ def metric_card(label: str, value: str) -> None:
 st.markdown(
     """
     <style>
-    html, body, [data-testid="stAppViewContainer"] { background: #0f1115 !important; color: #f4f7fb !important; }
+    html, body, [data-testid="stAppViewContainer"] { background: #ffffff !important; color: #1c1e21 !important; }
     #MainMenu, footer, header, [data-testid="stToolbar"] { display: none !important; }
-    .block-container { padding: 2rem 2rem 4rem !important; max-width: 100% !important; }
-    [data-testid="stMetric"] { background: #171a21 !important; border: 1px solid #2f3647 !important; border-radius: 16px !important; padding: 1rem !important; }
-    [data-testid="stMetricValue"] { color: #7ee787 !important; }
-    [data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea { background: #171a21 !important; color: #f4f7fb !important; border: 1px solid #2f3647 !important; }
-    [data-testid="stExpander"] { background: #171a21 !important; border: 1px solid #2f3647 !important; border-radius: 16px !important; }
+    .block-container { padding: 1rem 1.2rem 2rem !important; max-width: 100% !important; }
+    [data-testid="stMetric"] { background: #f8f9fa !important; border: 1px solid #e0e2e6 !important; border-radius: 12px !important; padding: 1.2rem !important; }
+    [data-testid="stMetricValue"] { color: #31a24c !important; font-weight:600; }
+    [data-testid="stMetricLabel"] { color: #65676b !important; }
+    [data-testid="stTextInput"] input, [data-testid="stTextArea"] textarea { background: #ffffff !important; color: #1c1e21 !important; border: 1px solid #e0e2e6 !important; border-radius:8px !important; }
+    [data-testid="stExpander"] { background: white !important; border: 1px solid #e0e2e6 !important; border-radius: 12px !important; }
+    [data-testid="stSelectbox"] > div > button { border: 1px solid #e0e2e6 !important; border-radius: 8px !important; background: white !important; }
+    [data-testid="stButton"] button { border-radius: 8px !important; font-weight: 500; }
+    h1, h2, h3, h4, h5, h6 { color: #1c1e21 !important; }
+    .stCaption { color: #65676b !important; }
+    @media (max-width:768px){
+      .block-container { padding: 0.8rem !important; }
+    }
     </style>
     """,
     unsafe_allow_html=True,

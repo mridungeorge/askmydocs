@@ -271,19 +271,19 @@ if query:
                         st.markdown(f"**[{idx}] {source.get('name', 'Source')}**")
                         st.caption(source.get("snippet", ""))
     else:
-        # Create placeholder for loading animation
-        response_container = st.container()
-        with response_container:
-            with st.chat_message("assistant"):
-                st.markdown("""
-                <style>
-                @keyframes dots { 0%, 20%, 50%, 80%, 100% { opacity: 1; } 40% { opacity: 0.3; } 60% { opacity: 0.7; } }
-                .loading-dots { font-size: 1.5rem; letter-spacing: 0.2em; animation: dots 1.4s infinite; text-align: center; }
-                .loading-text { font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; text-align: center; }
-                </style>
-                <div class="loading-dots">● ● ●</div>
-                <div class="loading-text">classifying · retrieving · generating</div>
-                """, unsafe_allow_html=True)
+        # Create placeholder for loading animation and response
+        response_placeholder = st.empty()
+        
+        with response_placeholder.chat_message("assistant"):
+            st.markdown("""
+            <style>
+            @keyframes dots { 0%, 20%, 50%, 80%, 100% { opacity: 1; } 40% { opacity: 0.3; } 60% { opacity: 0.7; } }
+            .loading-dots { font-size: 1.5rem; letter-spacing: 0.2em; animation: dots 1.4s infinite; text-align: center; }
+            .loading-text { font-size: 0.85rem; color: var(--muted); margin-top: 0.5rem; text-align: center; }
+            </style>
+            <div class="loading-dots">● ● ●</div>
+            <div class="loading-text">classifying · retrieving · generating</div>
+            """, unsafe_allow_html=True)
         
         # Process query while loading animation is displayed
         raptor_context = get_raptor_context(st.session_state.user_id, query, scope)
@@ -326,23 +326,21 @@ if query:
         log_query_full(st.session_state.user_id, query, rewritten_query, agent_type, routing.get("model", ""), int((time.time() - start) * 1000), len(sources), quality_score, "", False, scope)
         
         # Replace loading animation with response
-        response_container.clear()
-        with response_container:
-            with st.chat_message("assistant"):
-                st.markdown(response)
-                badges = [agent_type]
-                if agent_type == "web_search":
-                    badges.append("web search")
-                if routing.get("model"):
-                    badges.append(routing.get("model"))
-                if st.session_state.use_structured:
-                    badges.append(detect_output_type(query))
-                st.markdown('<div class="meta-row">' + ''.join(f'<span class="meta-badge">{badge}</span>' for badge in badges) + '</div>', unsafe_allow_html=True)
-                if sources:
-                    with st.expander(f"Sources ({len(sources)})"):
-                        for idx, source in enumerate(sources, start=1):
-                            st.markdown(f"**[{idx}] {source.get('name', 'Source')}**")
-                            st.caption(source.get("snippet", ""))
+        with response_placeholder.chat_message("assistant"):
+            st.markdown(response)
+            badges = [agent_type]
+            if agent_type == "web_search":
+                badges.append("web search")
+            if routing.get("model"):
+                badges.append(routing.get("model"))
+            if st.session_state.use_structured:
+                badges.append(detect_output_type(query))
+            st.markdown('<div class="meta-row">' + ''.join(f'<span class="meta-badge">{badge}</span>' for badge in badges) + '</div>', unsafe_allow_html=True)
+            if sources:
+                with st.expander(f"Sources ({len(sources)})"):
+                    for idx, source in enumerate(sources, start=1):
+                        st.markdown(f"**[{idx}] {source.get('name', 'Source')}**")
+                        st.caption(source.get("snippet", ""))
 
     st.session_state.messages.append({"role": "assistant", "content": response})
 

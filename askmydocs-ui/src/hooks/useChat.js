@@ -6,27 +6,33 @@ const API_URL       = import.meta.env.VITE_API_URL    || 'https://web-production
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON)
+const supabase = (SUPABASE_URL && SUPABASE_ANON)
+  ? createClient(SUPABASE_URL, SUPABASE_ANON)
+  : null
 
 const api = axios.create({ baseURL: API_URL })
 api.interceptors.request.use(async (config) => {
-  const { data: { session } } = await supabase.auth.getSession()
-  if (session?.access_token) {
-    config.headers.Authorization = `Bearer ${session.access_token}`
+  if (supabase) {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session?.access_token) {
+      config.headers.Authorization = `Bearer ${session.access_token}`
+    }
   }
   return config
 })
 
 async function getAuthToken() {
+  if (!supabase) return ''
   const { data: { session } } = await supabase.auth.getSession()
   return session?.access_token || ''
 }
 
 export function useAuth() {
-  const [user, setUser]       = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [user, setUser]       = useState(supabase ? null : { email: 'guest@local' })
+  const [loading, setLoading] = useState(!!supabase)
 
   useEffect(() => {
+    if (!supabase) return
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
       setLoading(false)
@@ -39,15 +45,15 @@ export function useAuth() {
 
   return {
     user, loading,
-    signInWithGoogle: () => supabase.auth.signInWithOAuth({
+    signInWithGoogle: () => supabase?.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin },
     }),
-    signInWithEmail: (email, password) => supabase.auth.signInWithPassword({ email, password }),
-    signUpWithEmail: (email, password) => supabase.auth.signUp({ email, password }),
-    signInWithPhone: (phone) => supabase.auth.signInWithOtp({ phone }),
-    verifyOtp: (phone, token) => supabase.auth.verifyOtp({ phone, token, type: 'sms' }),
-    signOut: () => supabase.auth.signOut(),
+    signInWithEmail: (email, password) => supabase?.auth.signInWithPassword({ email, password }),
+    signUpWithEmail: (email, password) => supabase?.auth.signUp({ email, password }),
+    signInWithPhone: (phone) => supabase?.auth.signInWithOtp({ phone }),
+    verifyOtp: (phone, token) => supabase?.auth.verifyOtp({ phone, token, type: 'sms' }),
+    signOut: () => supabase?.auth.signOut(),
   }
 }
 

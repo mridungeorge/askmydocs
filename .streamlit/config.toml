@@ -6,10 +6,10 @@ textColor = "#1c1e21"
 font = "sans serif"
 
 [client]
-showErrorDetails = true
+showErrorDetails = false
 
 [logger]
-level = "info"
+level = "warning"
 
 [server]
 headless = true

@@ -18,6 +18,7 @@ from backend.agents import run_agent
 from backend.logger import log_query
 from backend.guardrails import check_guardrails
 from backend.observability import log_query_full
+from backend.research_routes import router as research_router
 import os
 import json
 import time
@@ -35,6 +36,8 @@ app.add_middleware(
 
 if os.path.exists("frontend"):
     app.mount("/static", StaticFiles(directory="frontend"), name="frontend")
+
+app.include_router(research_router)
 
 
 # ── Models ────────────────────────────────────────────────────────────────────

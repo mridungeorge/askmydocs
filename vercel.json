@@ -1,0 +1,10 @@
+{
+  "buildCommand": "cd askmydocs-ui && npm install && npm run build",
+  "outputDirectory": "askmydocs-ui/dist",
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://web-production-203a0.up.railway.app/api/$1"
+    }
+  ]
+}

@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import axios from 'axios'
 
-const API_URL       = import.meta.env.VITE_API_URL    || 'https://askmydocs-production-a2bf.up.railway.app'
+const API_URL       = import.meta.env.VITE_API_URL    || 'https://web-production-203a0.up.railway.app'
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY
 

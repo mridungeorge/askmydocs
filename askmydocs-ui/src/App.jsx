@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import { useChat, useAuth } from './hooks/useChat'
-import Sidebar   from './components/Sidebar'
-import Chat      from './components/Chat'
-import Input     from './components/Input'
-import AuthPage  from './components/AuthPage'
+import Sidebar            from './components/Sidebar'
+import Chat               from './components/Chat'
+import Input              from './components/Input'
+import AuthPage           from './components/AuthPage'
+import ResearchConductor  from './components/ResearchConductor'
 import './index.css'
 
 export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [activeTab,   setActiveTab]   = useState('chat')  // 'chat' | 'research'
 
   const {
     user, loading: authLoading,
@@ -56,7 +58,55 @@ export default function App() {
 
   // Main app
   return (
-    <div className="app">
+    <div className="app" style={{ flexDirection: 'column' }}>
+
+      {/* Top nav */}
+      <nav style={{
+        display:        'flex',
+        alignItems:     'center',
+        gap:            0,
+        padding:        '0 16px',
+        borderBottom:   '1px solid var(--border)',
+        background:     'var(--bg)',
+        height:         44,
+        flexShrink:     0,
+        zIndex:         10,
+      }}>
+        <span style={{ fontFamily: 'var(--serif)', fontSize: 14, fontWeight: 400, marginRight: 24, color: 'var(--text)' }}>
+          AskMyDocs
+        </span>
+        {[['chat', 'Document Chat'], ['research', 'Research']].map(([tab, label]) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            style={{
+              padding:      '0 16px',
+              height:       44,
+              background:   'none',
+              border:       'none',
+              borderBottom: activeTab === tab ? '2px solid var(--text)' : '2px solid transparent',
+              fontSize:     13,
+              fontWeight:   activeTab === tab ? 500 : 400,
+              color:        activeTab === tab ? 'var(--text)' : 'var(--text-3)',
+              cursor:       'pointer',
+              transition:   'color 0.15s',
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      {/* Research tab */}
+      {activeTab === 'research' && (
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <ResearchConductor />
+        </div>
+      )}
+
+      {/* Document Chat tab */}
+      {activeTab === 'chat' && <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+
       {/* Mobile menu button */}
       <button
         className="mobile-menu-btn"
@@ -145,7 +195,7 @@ export default function App() {
                 <p style={{fontSize: '12px', color: '#888', lineHeight: '1.6', margin: 0}}>
                   ↓ Use the sidebar on the left (or the menu button) to load a PDF or URL
                 </p>
-                <button 
+                <button
                   className="empty-btn empty-btn-primary empty-btn-mobile"
                   onClick={() => setSidebarOpen(true)}
                   title="Open sidebar menu to load a document"
@@ -165,6 +215,7 @@ export default function App() {
           </>
         )}
       </main>
+      </div>}  {/* end chat tab */}
     </div>
   )
 }

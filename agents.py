@@ -90,8 +90,12 @@ def _extract_json(text: str) -> dict:
     return {}
 
 
-def _embed_texts(texts: list[str]) -> np.ndarray:
-    """Embed texts via NVIDIA embeddings API (OpenAI-compatible). Returns (N, D) float32 array."""
+def _embed_texts(texts: list[str], input_type: str = "passage") -> np.ndarray:
+    """Embed texts via NVIDIA embeddings API (OpenAI-compatible). Returns (N, D) float32 array.
+
+    nv-embedqa-e5-v5 is asymmetric: use input_type='passage' for documents,
+    input_type='query' for search queries.
+    """
     client = get_client()
     all_vecs: list = []
     for i in range(0, len(texts), 50):   # API batch limit
@@ -99,6 +103,7 @@ def _embed_texts(texts: list[str]) -> np.ndarray:
             model=EMBEDDINGS_MODEL,
             input=texts[i : i + 50],
             encoding_format="float",
+            extra_body={"input_type": input_type, "truncate": "END"},
         )
         all_vecs.extend([e.embedding for e in r.data])
     return np.array(all_vecs, dtype=np.float32)
@@ -402,7 +407,7 @@ async def memory_agent(state: dict) -> dict:
         safe_uid   = re.sub(r"[^a-z0-9]", "_", user_id.lower())[:24]
         collection = f"research_{safe_uid}"
 
-        embedding = _embed_texts([state["topic"]])[0].tolist()
+        embedding = _embed_texts([state["topic"]], input_type="query")[0].tolist()
         client    = QdrantClient(url=qdrant_url, api_key=os.getenv("QDRANT_API_KEY"))
         result    = client.query_points(
             collection_name=collection,
@@ -440,7 +445,7 @@ async def rag_indexer_agent(state: dict) -> dict:
         for p in all_papers
     ]
     try:
-        embeddings = await asyncio.to_thread(_embed_texts, texts)
+        embeddings = await asyncio.to_thread(_embed_texts, texts, "passage")
         _rag_store["embeddings"] = embeddings
         _rag_store["papers"]     = all_papers
         state["rag_context"] = _rag_retrieve(state["topic"], top_k=5)
@@ -642,7 +647,7 @@ def _rag_retrieve(query: str, top_k: int = 5) -> str:
         return ""
 
     try:
-        q_emb = _embed_texts([query])[0]
+        q_emb = _embed_texts([query], input_type="query")[0]
     except Exception:
         return ""
     embs   = _rag_store["embeddings"]

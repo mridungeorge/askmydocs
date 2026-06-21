@@ -176,19 +176,26 @@ async def research_events(job_id: str):
         raise HTTPException(status_code=404, detail="job not found")
 
     async def _stream():
-        sent = 0
+        import time as _time
+        sent       = 0
+        last_ping  = _time.monotonic()
         while True:
             job    = JOBS[job_id]
             events = job["events"]
             while sent < len(events):
                 yield f"data: {json.dumps(events[sent])}\n\n"
                 sent += 1
+                last_ping = _time.monotonic()
             if job["status"] in ("done", "error"):
                 payload = {"status": job["status"]}
                 if job["status"] == "error":
                     payload["error"] = job.get("error", "Unknown error")
                 yield f"data: {json.dumps(payload)}\n\n"
                 return
+            # Heartbeat comment every 20 s — keeps Railway/Vercel proxy from closing idle SSE
+            if _time.monotonic() - last_ping > 20:
+                yield ": ping\n\n"
+                last_ping = _time.monotonic()
             await asyncio.sleep(0.3)
 
     return StreamingResponse(

@@ -8,6 +8,7 @@ import os
 import json
 import uuid
 import asyncio
+import threading
 
 # Root-level pipeline modules live one directory above backend/
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -40,10 +41,15 @@ class ChatRequest(BaseModel):
 
 # ── Background pipeline task ────────────────────────────────────────────────────
 
-PIPELINE_TIMEOUT = 600  # 10 minutes hard limit — prevents Railway OOM/kill on hung runs
+PIPELINE_TIMEOUT = 600  # 10 minutes hard limit
 
 
-async def _run_pipeline(job_id: str, topic: str) -> None:
+async def _run_pipeline_async(job_id: str, topic: str) -> None:
+    """
+    Core pipeline coroutine. Runs in an ISOLATED event loop (see _run_pipeline_thread)
+    so LangGraph's ainvoke is never competing with uvicorn's event loop — the bug that
+    caused ainvoke to return partial state while background threads were still running.
+    """
     _rp.clear()
 
     async def _collect():
@@ -51,6 +57,8 @@ async def _run_pipeline(job_id: str, topic: str) -> None:
             for ev in _rp.drain():
                 JOBS[job_id]["events"].append(ev)
             await asyncio.sleep(0.1)
+        # Final drain once pipeline finishes
+        await asyncio.sleep(0.3)
         for ev in _rp.drain():
             JOBS[job_id]["events"].append(ev)
 
@@ -59,15 +67,13 @@ async def _run_pipeline(job_id: str, topic: str) -> None:
         compiled = _rg.build_graph()
         init     = _rs.initial_state(topic)
 
-        # Run without wait_for wrapper — wait_for interacts badly with LangGraph's
-        # internal checkpoint system and causes it to return the state after the first
-        # node (topic_planner) instead of the fully accumulated final state.
-        # The per-agent timeouts (phase_1=120s, writer=90s, critic=90s) are sufficient.
-        final = await compiled.ainvoke(init, config={"recursion_limit": 60})
+        final = await asyncio.wait_for(
+            compiled.ainvoke(init, config={"recursion_limit": 60}),
+            timeout=PIPELINE_TIMEOUT,
+        )
 
         final_dict = dict(final)
 
-        # Diagnostic log — visible in Railway deploy logs
         print(
             f"[pipeline] job={job_id[:8]} "
             f"verdict={final_dict.get('final_verdict')!r} "
@@ -77,7 +83,6 @@ async def _run_pipeline(job_id: str, topic: str) -> None:
             f"draft_chars={len(final_dict.get('draft') or '')}"
         )
 
-        # Detect incomplete run (planner-only state leaking out)
         has_useful_output = (
             final_dict.get("draft")
             or final_dict.get("final_verdict")
@@ -87,9 +92,8 @@ async def _run_pipeline(job_id: str, topic: str) -> None:
         if not has_useful_output:
             JOBS[job_id]["status"] = "error"
             JOBS[job_id]["error"]  = (
-                "Pipeline returned empty state — likely cause: NVIDIA_API_KEY is missing "
-                "or the LLM API is unreachable from Railway. "
-                "Check Railway → Variables → NVIDIA_API_KEY."
+                "Pipeline returned empty state — NVIDIA_API_KEY may be missing or invalid. "
+                "Check Railway → Variables → NVIDIA_API_KEY, or hit /api/research/health."
             )
         else:
             JOBS[job_id]["status"] = "done"
@@ -98,8 +102,7 @@ async def _run_pipeline(job_id: str, topic: str) -> None:
     except asyncio.TimeoutError:
         JOBS[job_id]["status"] = "error"
         JOBS[job_id]["error"]  = f"Pipeline timed out after {PIPELINE_TIMEOUT // 60} minutes"
-    except BaseException as exc:
-        # BaseException catches CancelledError too (Python 3.11+)
+    except Exception as exc:
         print(f"[pipeline] job={job_id[:8]} EXCEPTION: {type(exc).__name__}: {exc}")
         JOBS[job_id]["status"] = "error"
         JOBS[job_id]["error"]  = f"{type(exc).__name__}: {exc}"
@@ -109,15 +112,26 @@ async def _run_pipeline(job_id: str, topic: str) -> None:
         _ra._rag_store.clear()
 
 
+def _run_pipeline_thread(job_id: str, topic: str) -> None:
+    """
+    Runs the pipeline in a dedicated thread with its own asyncio event loop.
+
+    This is critical: when ainvoke runs inside uvicorn's shared event loop
+    (via asyncio.create_task), LangGraph returns partial state while
+    asyncio.to_thread tasks are still running. Isolating in a separate event
+    loop (exactly like `asyncio.run()` in test_pipeline.py) fixes this.
+    """
+    asyncio.run(_run_pipeline_async(job_id, topic))
+
+
 # ── Endpoints ───────────────────────────────────────────────────────────────────
 
 @router.get("/api/research/health")
 async def research_health():
-    """Diagnostic endpoint — tests NVIDIA API connectivity. Check this first when pipeline fails."""
-    import os
+    """Diagnostic — tests NVIDIA API connectivity."""
     nvidia_key = os.getenv("NVIDIA_API_KEY")
     if not nvidia_key:
-        return {"ok": False, "error": "NVIDIA_API_KEY not set in Railway environment variables"}
+        return {"ok": False, "error": "NVIDIA_API_KEY not set"}
     try:
         result = await asyncio.to_thread(
             _ra._chat,
@@ -135,7 +149,6 @@ async def research_health():
 async def start_research(http_req: Request, req: StartRequest):
     if not req.topic.strip():
         raise HTTPException(status_code=400, detail="topic is required")
-    # Rate limit: 10 pipeline runs / hour per IP (pipeline is expensive)
     try:
         from backend.api import _rate_limit
         ip = http_req.client.host if http_req.client else "unknown"
@@ -146,7 +159,14 @@ async def start_research(http_req: Request, req: StartRequest):
         pass
     job_id = str(uuid.uuid4())
     JOBS[job_id] = {"status": "running", "events": [], "state": None, "error": None}
-    asyncio.create_task(_run_pipeline(job_id, req.topic.strip()))
+    # Run in a dedicated thread with its own event loop — see _run_pipeline_thread
+    t = threading.Thread(
+        target=_run_pipeline_thread,
+        args=(job_id, req.topic.strip()),
+        daemon=True,
+        name=f"pipeline-{job_id[:8]}",
+    )
+    t.start()
     return {"job_id": job_id}
 
 
@@ -193,7 +213,7 @@ async def research_result(job_id: str):
 
 @router.post("/api/research/chat")
 async def research_chat(req: ChatRequest):
-    """Streams thesis-assistant reply token-by-token (fake-streams a sync result)."""
+    """Streams thesis-assistant reply token-by-token."""
     async def _stream():
         try:
             reply = await asyncio.to_thread(
@@ -202,7 +222,6 @@ async def research_chat(req: ChatRequest):
                 req.result,
                 req.history,
             )
-            # Stream word-by-word for a live feel
             words = reply.split(" ")
             for i, word in enumerate(words):
                 token = word if i == 0 else " " + word

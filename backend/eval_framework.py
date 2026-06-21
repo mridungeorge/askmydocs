@@ -1,4 +1,4 @@
-"""
+﻿"""
 RAGAS Evaluation Framework.
 
 RAGAS = Retrieval Augmented Generation Assessment.
@@ -16,8 +16,8 @@ Four metrics:
 
 Why these four:
 They cover the two failure modes of RAG systems:
-- Retrieval failures (wrong chunks) → context recall + precision
-- Generation failures (hallucination, off-topic) → faithfulness + relevancy
+- Retrieval failures (wrong chunks) â†’ context recall + precision
+- Generation failures (hallucination, off-topic) â†’ faithfulness + relevancy
 
 How to use:
 1. Build an eval set: 50 Q&A pairs where you know the right answer
@@ -33,12 +33,12 @@ from openai import OpenAI
 from backend.config import NVIDIA_API_KEY, NVIDIA_BASE_URL, LLM_POWERFUL, LLM_FAST
 from backend.retrieval import retrieve
 from backend.agents import run_agent
-from backend.auth import supabase
+from backend.auth import get_supabase
 
 nvidia = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
 
 
-# ── Metric implementations ────────────────────────────────────────────────────
+# â”€â”€ Metric implementations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def compute_faithfulness(question: str, answer: str, contexts: list[str]) -> float:
     """
@@ -242,7 +242,7 @@ Answer YES or NO:"""
     return relevant_count / len(contexts[:5])
 
 
-# ── Eval set management ───────────────────────────────────────────────────────
+# â”€â”€ Eval set management â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def save_eval_question(
     user_id:      str,
@@ -252,7 +252,7 @@ def save_eval_question(
 ) -> None:
     """Add a question to the eval set."""
     try:
-        supabase.table("eval_sets").insert({
+        get_supabase().table("eval_sets").insert({
             "user_id":      user_id,
             "question":     question,
             "ground_truth": ground_truth,
@@ -265,7 +265,7 @@ def save_eval_question(
 def get_eval_set(user_id: str, doc_title: str = None) -> list[dict]:
     """Get all eval questions for a user."""
     try:
-        query = supabase.table("eval_sets").select("*").eq("user_id", user_id)
+        query = get_supabase().table("eval_sets").select("*").eq("user_id", user_id)
         if doc_title:
             query = query.eq("doc_title", doc_title)
         return query.execute().data or []
@@ -273,7 +273,7 @@ def get_eval_set(user_id: str, doc_title: str = None) -> list[dict]:
         return []
 
 
-# ── Full evaluation run ───────────────────────────────────────────────────────
+# â”€â”€ Full evaluation run â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def run_evaluation(
     user_id:    str,
@@ -343,7 +343,7 @@ def run_evaluation(
         week_start = datetime.utcnow().date() - timedelta(
             days=datetime.utcnow().weekday()
         )
-        supabase.table("ragas_scores").upsert({
+        get_supabase().table("ragas_scores").upsert({
             "user_id":           user_id,
             "week_start":        str(week_start),
             "faithfulness":      averaged.get("faithfulness", 0),
@@ -362,7 +362,7 @@ def get_ragas_history(user_id: str, weeks: int = 8) -> list[dict]:
     """Get historical RAGAS scores for trend charts."""
     try:
         since = str(datetime.utcnow().date() - timedelta(weeks=weeks))
-        result = supabase.table("ragas_scores") \
+        result = get_supabase().table("ragas_scores") \
             .select("*") \
             .eq("user_id", user_id) \
             .gte("week_start", since) \
@@ -371,3 +371,4 @@ def get_ragas_history(user_id: str, weeks: int = 8) -> list[dict]:
         return result.data or []
     except Exception:
         return []
+

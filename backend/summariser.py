@@ -1,4 +1,4 @@
-"""
+﻿"""
 Document summarisation on ingest.
 
 Why this matters:
@@ -12,14 +12,14 @@ The summary also serves as context for the guardrail classifier
 
 Implementation:
 - Run after ingest, on the first 10 chunks
-- One LLM call — fast, cheap
+- One LLM call â€” fast, cheap
 - Store in Supabase for persistence
 - Return immediately so UI can show it without waiting
 """
 
 from openai import OpenAI
 from backend.config import NVIDIA_API_KEY, NVIDIA_BASE_URL, LLM_FAST
-from backend.auth import supabase
+from backend.auth import get_supabase
 
 _nvidia_client = None
 
@@ -67,7 +67,7 @@ Your summary must:
 1. Be exactly 3 sentences
 2. Cover: what the document is about, its main topics, and who would find it useful
 3. Be written in plain English, no jargon
-4. Not start with "This document" — vary the opening
+4. Not start with "This document" â€” vary the opening
 
 Document excerpt:
 {sample_text}
@@ -97,7 +97,7 @@ def save_summary(
     Uses upsert so re-ingesting the same doc updates the summary.
     """
     try:
-        supabase.table("document_summaries").upsert({
+        get_supabase().table("document_summaries").upsert({
             "user_id":     user_id,
             "doc_title":   doc_title,
             "summary":     summary,
@@ -113,7 +113,7 @@ def get_summary(user_id: str, doc_title: str) -> str | None:
     Returns None if not found.
     """
     try:
-        result = supabase.table("document_summaries") \
+        result = get_supabase().table("document_summaries") \
             .select("summary") \
             .eq("user_id", user_id) \
             .eq("doc_title", doc_title) \
@@ -130,7 +130,7 @@ def get_all_summaries(user_id: str) -> list[dict]:
     Used in the observability dashboard.
     """
     try:
-        result = supabase.table("document_summaries") \
+        result = get_supabase().table("document_summaries") \
             .select("*") \
             .eq("user_id", user_id) \
             .order("created_at", desc=True) \
@@ -138,3 +138,4 @@ def get_all_summaries(user_id: str) -> list[dict]:
         return result.data or []
     except Exception:
         return []
+

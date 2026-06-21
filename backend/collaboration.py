@@ -1,11 +1,11 @@
-"""
+﻿"""
 Real-time collaboration using Supabase Realtime.
 
 Use case: Team loads the same document, all members ask questions,
 everyone sees the shared conversation in real time.
 
 How it works:
-1. Owner creates a session → gets a 6-char session code (e.g. "XK7M2P")
+1. Owner creates a session â†’ gets a 6-char session code (e.g. "XK7M2P")
 2. Team members join with the code
 3. All questions/answers are shared in the session
 4. Supabase Realtime broadcasts database changes to all subscribers
@@ -13,7 +13,7 @@ How it works:
 Why Supabase Realtime:
 - Free tier: 500 concurrent connections
 - WebSocket-based, zero infrastructure
-- Built into Supabase — same DB we already use
+- Built into Supabase â€” same DB we already use
 - Works with Row Level Security
 
 JavaScript client subscribes to changes:
@@ -24,7 +24,7 @@ supabase.channel('session-{code}')
 
 import random
 import string
-from backend.auth import supabase
+from backend.auth import get_supabase
 
 
 def generate_session_code(length: int = 6) -> str:
@@ -45,7 +45,7 @@ def create_session(
     # Ensure uniqueness (retry if collision)
     for _ in range(5):
         try:
-            result = supabase.table("shared_sessions").insert({
+            result = get_supabase().table("shared_sessions").insert({
                 "owner_id":    owner_id,
                 "doc_title":   doc_title,
                 "session_code": code,
@@ -60,7 +60,7 @@ def create_session(
 def get_session(code: str) -> dict | None:
     """Get session by code. Returns None if not found or inactive."""
     try:
-        result = supabase.table("shared_sessions") \
+        result = get_supabase().table("shared_sessions") \
             .select("*") \
             .eq("session_code", code.upper()) \
             .eq("active", True) \
@@ -81,7 +81,7 @@ def add_session_message(
 ) -> dict:
     """Add a message to a shared session. Triggers Realtime broadcast."""
     try:
-        result = supabase.table("session_messages").insert({
+        result = get_supabase().table("session_messages").insert({
             "session_id": session_id,
             "user_id":    user_id,
             "user_email": user_email,
@@ -98,7 +98,7 @@ def add_session_message(
 def get_session_messages(session_id: str, limit: int = 50) -> list[dict]:
     """Get all messages for a session, ordered chronologically."""
     try:
-        result = supabase.table("session_messages") \
+        result = get_supabase().table("session_messages") \
             .select("*") \
             .eq("session_id", session_id) \
             .order("created_at") \
@@ -112,10 +112,11 @@ def get_session_messages(session_id: str, limit: int = 50) -> list[dict]:
 def close_session(session_id: str, owner_id: str) -> None:
     """Close a session (owner only)."""
     try:
-        supabase.table("shared_sessions") \
+        get_supabase().table("shared_sessions") \
             .update({"active": False}) \
             .eq("id", session_id) \
             .eq("owner_id", owner_id) \
             .execute()
     except Exception as e:
         print(f"Session close error: {e}")
+

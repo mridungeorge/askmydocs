@@ -23,7 +23,7 @@ The dashboard reads from these logs.
 
 import time
 from datetime import datetime, timedelta
-from backend.auth import supabase
+from backend.auth import get_supabase
 
 
 # ── Query logging ─────────────────────────────────────────────────────────────
@@ -51,7 +51,7 @@ def log_query_full(
     guardrail_hit: True if query was blocked by guardrails
     """
     try:
-        supabase.table("query_logs").insert({
+        get_supabase().table("query_logs").insert({
             "user_id":       user_id,
             "query":         query[:500],     # truncate long queries
             "rewritten":     rewritten[:500] if rewritten else None,

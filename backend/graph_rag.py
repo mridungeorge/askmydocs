@@ -1,5 +1,5 @@
-"""
-Graph RAG — knowledge graph over documents.
+﻿"""
+Graph RAG â€” knowledge graph over documents.
 
 Why Graph RAG:
 Current RAG treats every chunk independently.
@@ -11,9 +11,9 @@ Document says: "The Transformer architecture was used in BERT" (chunk 2)
 Document says: "The Transformer was introduced in 'Attention is All You Need'" (chunk 3)
 
 Query: "Who created the architecture used in BERT?"
-Correct answer: "Vaswani et al. at Google" (multi-hop: BERT → Transformer → paper → authors)
+Correct answer: "Vaswani et al. at Google" (multi-hop: BERT â†’ Transformer â†’ paper â†’ authors)
 Current RAG: Retrieves one chunk, misses the connection.
-Graph RAG: Traverses BERT → Transformer → paper → finds authors.
+Graph RAG: Traverses BERT â†’ Transformer â†’ paper â†’ finds authors.
 
 Implementation:
 1. Extract entities and relations from each chunk (LLM-based NER)
@@ -30,13 +30,13 @@ import hashlib
 from collections import defaultdict
 from openai import OpenAI
 from backend.config import NVIDIA_API_KEY, NVIDIA_BASE_URL, LLM_FAST
-from backend.auth import supabase
+from backend.auth import get_supabase
 
 nvidia = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
 
-# In-memory graph — rebuilt from Supabase on startup
+# In-memory graph â€” rebuilt from Supabase on startup
 # For production: use a proper graph DB like Neo4j
-_graphs = {}  # collection_name → NetworkX graph
+_graphs = {}  # collection_name â†’ NetworkX graph
 
 
 def _get_graph(collection: str):
@@ -51,7 +51,7 @@ def _get_graph(collection: str):
     return _graphs[collection]
 
 
-# ── Entity extraction ─────────────────────────────────────────────────────────
+# â”€â”€ Entity extraction â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def extract_entities_and_relations(
     text: str,
@@ -68,7 +68,7 @@ def extract_entities_and_relations(
 
     Why LLM-based NER over spaCy:
     spaCy misses domain-specific entities (model names, technical terms).
-    LLM understands context — knows "Transformer" is an AI architecture,
+    LLM understands context â€” knows "Transformer" is an AI architecture,
     not an electrical device.
     """
     prompt = f"""Extract entities and relationships from this text.
@@ -162,9 +162,9 @@ def build_graph_for_collection(
     # Persist to Supabase (for reload after restart)
     try:
         # Clear existing
-        supabase.table("kg_entities").delete() \
+        get_supabase().table("kg_entities").delete() \
             .eq("user_id", user_id).eq("collection", collection).execute()
-        supabase.table("kg_relations").delete() \
+        get_supabase().table("kg_relations").delete() \
             .eq("user_id", user_id).eq("collection", collection).execute()
 
         # Insert nodes
@@ -179,7 +179,7 @@ def build_graph_for_collection(
             })
 
         if entities_to_insert:
-            supabase.table("kg_entities").insert(entities_to_insert).execute()
+            get_supabase().table("kg_entities").insert(entities_to_insert).execute()
 
         # Insert edges
         relations_to_insert = []
@@ -193,7 +193,7 @@ def build_graph_for_collection(
             })
 
         if relations_to_insert:
-            supabase.table("kg_relations").insert(relations_to_insert).execute()
+            get_supabase().table("kg_relations").insert(relations_to_insert).execute()
 
     except Exception as e:
         print(f"Graph persist error: {e}")
@@ -211,7 +211,7 @@ def load_graph_from_supabase(collection: str, user_id: str) -> None:
     G = nx.DiGraph()
 
     # Load entities
-    entities = supabase.table("kg_entities") \
+    entities = get_supabase().table("kg_entities") \
         .select("*").eq("collection", collection).eq("user_id", user_id).execute()
 
     for e in entities.data or []:
@@ -222,7 +222,7 @@ def load_graph_from_supabase(collection: str, user_id: str) -> None:
         )
 
     # Load relations
-    relations = supabase.table("kg_relations") \
+    relations = get_supabase().table("kg_relations") \
         .select("*").eq("collection", collection).eq("user_id", user_id).execute()
 
     for r in relations.data or []:
@@ -283,7 +283,7 @@ def graph_retrieve(
     if not query_entities:
         return []
 
-    # Traverse graph — collect connected chunk IDs
+    # Traverse graph â€” collect connected chunk IDs
     relevant_chunk_ids = set()
 
     for entity in query_entities:
@@ -315,3 +315,4 @@ def graph_retrieve(
     ]
 
     return graph_chunks[:max_chunks]
+

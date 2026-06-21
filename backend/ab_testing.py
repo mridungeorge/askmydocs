@@ -1,4 +1,4 @@
-"""
+﻿"""
 Prompt A/B testing framework.
 
 Why A/B test prompts:
@@ -20,11 +20,11 @@ Most AI engineers have never implemented it.
 import random
 from openai import OpenAI
 from backend.config import NVIDIA_API_KEY, NVIDIA_BASE_URL, LLM_FAST
-from backend.auth import supabase
+from backend.auth import get_supabase
 
 nvidia = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
 
-# ── Default prompts ───────────────────────────────────────────────────────────
+# â”€â”€ Default prompts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 PROMPT_A = """You are a precise document assistant.
 Answer using ONLY the provided context.
@@ -50,7 +50,7 @@ def get_active_experiment() -> dict | None:
         return _active_experiment
 
     try:
-        result = supabase.table("prompt_experiments") \
+        result = get_supabase().table("prompt_experiments") \
             .select("*") \
             .eq("active", True) \
             .limit(1) \
@@ -93,7 +93,7 @@ def log_experiment_result(
     if not experiment_id:
         return
     try:
-        supabase.table("experiment_results").insert({
+        get_supabase().table("experiment_results").insert({
             "experiment_id": experiment_id,
             "user_id":       user_id,
             "variant":       variant,
@@ -111,7 +111,7 @@ def get_experiment_results(experiment_id: str) -> dict:
     Returns stats per variant for dashboard display.
     """
     try:
-        result = supabase.table("experiment_results") \
+        result = get_supabase().table("experiment_results") \
             .select("*") \
             .eq("experiment_id", experiment_id) \
             .execute()
@@ -147,12 +147,12 @@ def create_experiment(prompt_a: str, prompt_b: str, name: str) -> str:
     _active_experiment = None
 
     try:
-        supabase.table("prompt_experiments") \
+        get_supabase().table("prompt_experiments") \
             .update({"active": False}) \
             .eq("active", True) \
             .execute()
 
-        result = supabase.table("prompt_experiments").insert({
+        result = get_supabase().table("prompt_experiments").insert({
             "name":     name,
             "prompt_a": prompt_a,
             "prompt_b": prompt_b,
@@ -163,3 +163,4 @@ def create_experiment(prompt_a: str, prompt_b: str, name: str) -> str:
     except Exception as e:
         print(f"Experiment create error: {e}")
         return ""
+

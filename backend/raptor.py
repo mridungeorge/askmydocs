@@ -1,9 +1,9 @@
-"""
-RAPTOR — Recursive Abstractive Processing for Tree-Organized Retrieval.
+﻿"""
+RAPTOR â€” Recursive Abstractive Processing for Tree-Organized Retrieval.
 
 The problem with flat chunk retrieval:
 "What are the main themes across all documents?" 
-→ Vector search returns random chunks, misses the big picture.
+â†’ Vector search returns random chunks, misses the big picture.
 
 RAPTOR solution:
 Build a hierarchy of summaries:
@@ -13,9 +13,9 @@ Build a hierarchy of summaries:
   Level 3: Corpus summary (one for all documents)
 
 Query routing:
-  Specific factual question → search level 0 (chunks)
-  Thematic question         → search level 2 (document summaries)
-  Corpus-wide question      → search level 3 (corpus summary)
+  Specific factual question â†’ search level 0 (chunks)
+  Thematic question         â†’ search level 2 (document summaries)
+  Corpus-wide question      â†’ search level 3 (corpus summary)
 
 This dramatically improves answers to big-picture questions.
 """
@@ -23,7 +23,7 @@ This dramatically improves answers to big-picture questions.
 import json
 from openai import OpenAI
 from backend.config import NVIDIA_API_KEY, NVIDIA_BASE_URL, LLM_FAST, LLM_POWERFUL
-from backend.auth import supabase
+from backend.auth import get_supabase
 
 nvidia = OpenAI(base_url=NVIDIA_BASE_URL, api_key=NVIDIA_API_KEY)
 
@@ -125,7 +125,7 @@ def build_raptor_tree(
 
         # Persist to Supabase
         try:
-            supabase.table("raptor_summaries").upsert({
+            get_supabase().table("raptor_summaries").upsert({
                 "user_id":   user_id,
                 "doc_title": doc_title,
                 "level":     1,
@@ -148,7 +148,7 @@ def build_raptor_tree(
         doc_summary = summarise_chunks(l1_chunks, level=2, doc_title=doc_title)
 
         try:
-            supabase.table("raptor_summaries").upsert({
+            get_supabase().table("raptor_summaries").upsert({
                 "user_id":   user_id,
                 "doc_title": doc_title,
                 "level":     2,
@@ -169,7 +169,7 @@ def build_corpus_summary(user_id: str) -> str:
     Called after each new document is ingested.
     """
     try:
-        doc_summaries = supabase.table("raptor_summaries") \
+        doc_summaries = get_supabase().table("raptor_summaries") \
             .select("summary, doc_title") \
             .eq("user_id", user_id) \
             .eq("level", 2) \
@@ -185,7 +185,7 @@ def build_corpus_summary(user_id: str) -> str:
         corpus_chunks = [FakeChunk(f"{s['doc_title']}: {s['summary']}") for s in doc_summaries]
         corpus_summary = summarise_chunks(corpus_chunks, level=3, doc_title="corpus")
 
-        supabase.table("raptor_summaries").upsert({
+        get_supabase().table("raptor_summaries").upsert({
             "user_id":   user_id,
             "doc_title": "corpus",
             "level":     3,
@@ -218,7 +218,7 @@ def get_raptor_context(
     ]
     if any(s in query_lower for s in corpus_signals):
         try:
-            result = supabase.table("raptor_summaries") \
+            result = get_supabase().table("raptor_summaries") \
                 .select("summary") \
                 .eq("user_id", user_id) \
                 .eq("level", 3) \
@@ -235,7 +235,7 @@ def get_raptor_context(
     ]
     if any(s in query_lower for s in doc_signals) and doc_title:
         try:
-            result = supabase.table("raptor_summaries") \
+            result = get_supabase().table("raptor_summaries") \
                 .select("summary") \
                 .eq("user_id", user_id) \
                 .eq("doc_title", doc_title) \
@@ -246,4 +246,5 @@ def get_raptor_context(
         except Exception:
             pass
 
-    return ""  # no RAPTOR context needed — use regular retrieval
+    return ""  # no RAPTOR context needed â€” use regular retrieval
+

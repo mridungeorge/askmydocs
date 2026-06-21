@@ -1,6 +1,6 @@
 {
-  "buildCommand": "cd askmydocs-ui && npm install && npm run build",
-  "outputDirectory": "askmydocs-ui/dist",
+  "buildCommand": "npm install && npm run build",
+  "outputDirectory": "dist",
   "rewrites": [
     {
       "source": "/api/(.*)",

@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react'
 
-const API = import.meta.env.VITE_API_URL || ''
+const API = import.meta.env.VITE_API_URL || 'https://web-production-203a0.up.railway.app'
 
 export function useResearch() {
   const [status, setStatus]           = useState('idle')   // idle | running | done | error

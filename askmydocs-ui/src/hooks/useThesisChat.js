@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 
-const API = import.meta.env.VITE_API_URL || ''
+const API = import.meta.env.VITE_API_URL || 'https://web-production-203a0.up.railway.app'
 
 export function useThesisChat() {
   const [messages,  setMessages]  = useState([])

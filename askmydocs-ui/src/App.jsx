@@ -47,11 +47,8 @@ export default function App() {
   if (!user) {
     return (
       <AuthPage
-        onSignInGoogle={signInWithGoogle}
         onSignInEmail={signInWithEmail}
         onSignUp={signUpWithEmail}
-        onSignInPhone={signInWithPhone}
-        onVerifyOtp={verifyOtp}
       />
     )
   }

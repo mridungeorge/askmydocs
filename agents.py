@@ -248,7 +248,7 @@ async def ingestion_agent(state: dict) -> dict:
 
     state["papers"] = papers
     print(f"  -> {len(papers)} paper(s) ingested")
-    _prog.push("ingestion", "done", f"{len(papers)} papers ingested", count=len(papers))
+    _prog.push("ingestion", "done", f"{len(papers)} papers ingested", paper_count=len(papers))
     return state
 
 

@@ -40,6 +40,9 @@ class ChatRequest(BaseModel):
 
 # ── Background pipeline task ────────────────────────────────────────────────────
 
+PIPELINE_TIMEOUT = 600  # 10 minutes hard limit — prevents Railway OOM/kill on hung runs
+
+
 async def _run_pipeline(job_id: str, topic: str) -> None:
     _rp.clear()
 
@@ -56,15 +59,32 @@ async def _run_pipeline(job_id: str, topic: str) -> None:
     try:
         compiled = _rg.build_graph()
         init     = _rs.initial_state(topic)
-        final    = await compiled.ainvoke(init)
-        JOBS[job_id]["status"] = "done"
-        JOBS[job_id]["state"]  = dict(final)
+        final    = await asyncio.wait_for(
+            compiled.ainvoke(init, config={"recursion_limit": 60}),
+            timeout=PIPELINE_TIMEOUT,
+        )
+        final_dict = dict(final)
+        # Detect silently-truncated runs (LangGraph hit recursion limit without raising)
+        if not final_dict.get("final_verdict") and not final_dict.get("draft"):
+            JOBS[job_id]["status"] = "error"
+            JOBS[job_id]["error"]  = (
+                "Pipeline did not complete — the graph may have exceeded its step limit "
+                "or the LLM API is unavailable. Check NVIDIA_API_KEY and try again."
+            )
+        else:
+            JOBS[job_id]["status"] = "done"
+            JOBS[job_id]["state"]  = final_dict
+    except asyncio.TimeoutError:
+        JOBS[job_id]["status"] = "error"
+        JOBS[job_id]["error"]  = f"Pipeline timed out after {PIPELINE_TIMEOUT // 60} minutes"
     except Exception as exc:
         JOBS[job_id]["status"] = "error"
         JOBS[job_id]["error"]  = str(exc)
     finally:
         await asyncio.sleep(0.4)   # let collector do one last drain
         collector.cancel()
+        # Free numpy embedding store to reclaim memory between runs
+        _ra._rag_store.clear()
 
 
 # ── Endpoints ───────────────────────────────────────────────────────────────────

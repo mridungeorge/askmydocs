@@ -26,7 +26,11 @@ export function useResearch() {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ topic }),
       })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      if (!res.ok) throw new Error(
+        res.status === 502 || res.status === 503
+          ? `Server unavailable (${res.status}) — the pipeline may be starting up. Please try again in a few seconds.`
+          : `HTTP ${res.status}`
+      )
       const { job_id } = await res.json()
 
       const es = new EventSource(`${API}/api/research/events/${job_id}`)

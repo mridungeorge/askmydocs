@@ -268,7 +268,9 @@ export default function ResearchConductor() {
                 {result.final_verdict === 'PASS' ? 'Research passed quality review' : 'Research requires human review'}
               </div>
               <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
-                Confidence {confPct} · {result.papers?.length ?? 0} papers · {result.round_num ?? 0} review round(s)
+                Confidence {confPct}
+                {result.papers?.length > 0 ? ` · ${result.papers.length} papers` : ' · no papers found'}
+                {result.round_num > 0 ? ` · ${result.round_num} review round(s)` : ''}
               </div>
             </div>
           </div>

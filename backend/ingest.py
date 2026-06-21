@@ -34,13 +34,20 @@ def get_qdrant_client():
         qdrant = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
     return qdrant
 
-enc      = tiktoken.get_encoding("cl100k_base")
-splitter = RecursiveCharacterTextSplitter(
-    chunk_size=CHUNK_SIZE,
-    chunk_overlap=CHUNK_OVERLAP,
-    length_function=lambda t: len(enc.encode(t)),
-    separators=["\n\n", "\n", ". ", " ", ""],
-)
+_enc      = None
+_splitter = None
+
+def _get_splitter():
+    global _enc, _splitter
+    if _splitter is None:
+        _enc = tiktoken.get_encoding("cl100k_base")
+        _splitter = RecursiveCharacterTextSplitter(
+            chunk_size=CHUNK_SIZE,
+            chunk_overlap=CHUNK_OVERLAP,
+            length_function=lambda t: len(_enc.encode(t)),
+            separators=["\n\n", "\n", ". ", " ", ""],
+        )
+    return _splitter
 
 
 @dataclass
@@ -78,10 +85,11 @@ def extract_from_pdf(file_bytes: bytes, filename: str) -> tuple[str, str]:
 
 
 def make_chunks(source_name: str, source_type: str, text: str) -> list[Chunk]:
-    raw_chunks = splitter.split_text(text)
+    sp = _get_splitter()
+    raw_chunks = sp.split_text(text)
     chunks = []
     for i, chunk_text in enumerate(raw_chunks):
-        token_count = len(enc.encode(chunk_text))
+        token_count = len(_enc.encode(chunk_text))
         if token_count < 30:
             continue
         chunk_id = hashlib.md5(f"{source_name}::{i}".encode()).hexdigest()

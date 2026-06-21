@@ -18,21 +18,20 @@ Rate limiting (see api.py):
 - Login / signup / password-reset: 5 attempts per 15 min per IP+email (Upstash).
 """
 
-import os
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from supabase import create_client, Client
 from backend.config import SUPABASE_URL, SUPABASE_SERVICE_KEY, DEBUG_MODE
 
-supabase: Client = None
+_supabase = None
 
-def get_supabase() -> Client | None:
-    global supabase
-    if supabase is None:
+def get_supabase():
+    global _supabase
+    if _supabase is None:
         if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
             return None
-        supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-    return supabase
+        from supabase import create_client   # lazy — avoids 29s Pydantic V1 startup cost
+        _supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    return _supabase
 
 
 security = HTTPBearer(auto_error=False)

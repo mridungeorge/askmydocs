@@ -55,10 +55,13 @@ function StrengthMeter({ password }) {
 }
 
 
-export default function AuthPage({ onSignInEmail, onSignUp }) {
+export default function AuthPage({ onSignInEmail, onSignUp, onSignInPhone, onVerifyOtp }) {
   const [mode, setMode]         = useState('signin')
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
+  const [phone, setPhone]       = useState('')
+  const [otp, setOtp]           = useState('')
+  const [otpSent, setOtpSent]   = useState(false)
   const [error, setError]       = useState('')
   const [loading, setLoading]   = useState(false)
 
@@ -86,6 +89,24 @@ export default function AuthPage({ onSignInEmail, onSignUp }) {
       }
     } catch (e) {
       setError(e.message || 'Authentication failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handlePhoneAuth = async () => {
+    setLoading(true)
+    setError('')
+    try {
+      if (!otpSent) {
+        await onSignInPhone(phone)
+        setOtpSent(true)
+        setError('OTP sent to your phone.')
+      } else {
+        await onVerifyOtp(phone, otp)
+      }
+    } catch (e) {
+      setError(e.message || 'Phone auth failed')
     } finally {
       setLoading(false)
     }
@@ -122,7 +143,7 @@ export default function AuthPage({ onSignInEmail, onSignUp }) {
 
         {/* Mode tabs */}
         <div style={{ display: 'flex', borderBottom: '1px solid #d8d8d2', marginBottom: 32, gap: 0 }}>
-          {['signin', 'signup'].map(m => (
+          {['signin', 'signup', 'phone'].map(m => (
             <button
               key={m}
               onClick={() => { setMode(m); setError(''); setPassword('') }}
@@ -141,35 +162,68 @@ export default function AuthPage({ onSignInEmail, onSignUp }) {
                 cursor: 'pointer',
               }}
             >
-              {m === 'signin' ? 'Sign in' : 'Sign up'}
+              {m === 'signin' ? 'Sign in' : m === 'signup' ? 'Sign up' : 'Phone'}
             </button>
           ))}
         </div>
 
-        <input
-          className="input-field"
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleEmailAuth()}
-        />
-        <input
-          className="input-field"
-          type="password"
-          placeholder={mode === 'signup' ? 'Password (min 12 characters)' : 'Password'}
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleEmailAuth()}
-        />
-        {mode === 'signup' && <StrengthMeter password={password} />}
-        <button
-          className="btn-primary"
-          onClick={handleEmailAuth}
-          disabled={!email || !password || loading || (mode === 'signup' && !getStrength(password).strong)}
-        >
-          {loading ? '…' : mode === 'signup' ? 'Create account' : 'Sign in'}
-        </button>
+        {/* Email / Phone forms */}
+        {mode !== 'phone' ? (
+          <>
+            <input
+              className="input-field"
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleEmailAuth()}
+            />
+            <input
+              className="input-field"
+              type="password"
+              placeholder={mode === 'signup' ? 'Password (min 12 characters)' : 'Password'}
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleEmailAuth()}
+            />
+            {mode === 'signup' && <StrengthMeter password={password} />}
+            <button
+              className="btn-primary"
+              onClick={handleEmailAuth}
+              disabled={!email || !password || loading || (mode === 'signup' && !getStrength(password).strong)}
+            >
+              {loading ? '…' : mode === 'signup' ? 'Create account' : 'Sign in'}
+            </button>
+          </>
+        ) : (
+          <>
+            <input
+              className="input-field"
+              type="tel"
+              placeholder="+61 4XX XXX XXX"
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              disabled={otpSent}
+            />
+            {otpSent && (
+              <input
+                className="input-field"
+                type="text"
+                placeholder="Enter OTP"
+                value={otp}
+                onChange={e => setOtp(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handlePhoneAuth()}
+              />
+            )}
+            <button
+              className="btn-primary"
+              onClick={handlePhoneAuth}
+              disabled={!phone || loading}
+            >
+              {loading ? '…' : otpSent ? 'Verify OTP' : 'Send OTP'}
+            </button>
+          </>
+        )}
 
         {error && (
           <div style={{

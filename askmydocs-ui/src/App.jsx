@@ -49,6 +49,8 @@ export default function App() {
       <AuthPage
         onSignInEmail={signInWithEmail}
         onSignUp={signUpWithEmail}
+        onSignInPhone={signInWithPhone}
+        onVerifyOtp={verifyOtp}
       />
     )
   }

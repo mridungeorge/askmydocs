@@ -55,26 +55,57 @@ function StrengthMeter({ password }) {
 }
 
 
-export default function AuthPage({ onSignInEmail, onSignUp, onSignInPhone, onVerifyOtp }) {
-  const [mode, setMode]         = useState('signin')
-  const [email, setEmail]       = useState('')
-  const [password, setPassword] = useState('')
-  const [phone, setPhone]       = useState('')
-  const [otp, setOtp]           = useState('')
-  const [otpSent, setOtpSent]   = useState(false)
-  const [error, setError]       = useState('')
-  const [loading, setLoading]   = useState(false)
+function EyeIcon({ open }) {
+  return open ? (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+      <circle cx="12" cy="12" r="3"/>
+    </svg>
+  ) : (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/>
+      <line x1="1" y1="1" x2="23" y2="23"/>
+    </svg>
+  )
+}
 
-  const isSuccess = error.includes('Check') || error.includes('sent')
+export default function AuthPage({ onSignInEmail, onSignUp, onSignInPhone, onVerifyOtp }) {
+  const [mode, setMode]                   = useState('signin')
+  const [email, setEmail]                 = useState('')
+  const [password, setPassword]           = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [confirmTouched, setConfirmTouched]   = useState(false)
+  const [showPassword, setShowPassword]       = useState(false)
+  const [showConfirm, setShowConfirm]         = useState(false)
+  const [phone, setPhone]                 = useState('')
+  const [otp, setOtp]                     = useState('')
+  const [otpSent, setOtpSent]             = useState(false)
+  const [error, setError]                 = useState('')
+  const [loading, setLoading]             = useState(false)
+  const [signupDone, setSignupDone]       = useState(false)
+  const [resendCooldown, setResendCooldown] = useState(0)
+
+  const passwordMismatch = confirmTouched && confirmPassword && password !== confirmPassword
+
+  const startCooldown = () => {
+    setResendCooldown(60)
+    const t = setInterval(() => {
+      setResendCooldown(prev => { if (prev <= 1) { clearInterval(t); return 0 } return prev - 1 })
+    }, 1000)
+  }
 
   const handleEmailAuth = async () => {
     setLoading(true)
     setError('')
     try {
       if (mode === 'signup') {
-        const { score, strong } = getStrength(password)
+        const { strong } = getStrength(password)
         if (!strong) {
           setError('Password too weak — please meet all 5 requirements.')
+          return
+        }
+        if (password !== confirmPassword) {
+          setError('Passwords do not match.')
           return
         }
         const breached = await isBreached(password)
@@ -83,12 +114,26 @@ export default function AuthPage({ onSignInEmail, onSignUp, onSignInPhone, onVer
           return
         }
         await onSignUp(email, password)
-        setError('Check your email for a confirmation link.')
+        setSignupDone(true)
+        startCooldown()
       } else {
         await onSignInEmail(email, password)
       }
     } catch (e) {
       setError(e.message || 'Authentication failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleResend = async () => {
+    if (resendCooldown > 0) return
+    setLoading(true)
+    try {
+      await onSignUp(email, password)
+      startCooldown()
+    } catch (e) {
+      setError(e.message || 'Failed to resend.')
     } finally {
       setLoading(false)
     }
@@ -112,137 +157,181 @@ export default function AuthPage({ onSignInEmail, onSignUp, onSignInPhone, onVer
     }
   }
 
-  return (
-    <div style={{
-      minHeight: '100vh',
-      background: '#fafaf8',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-    }}>
+  const wrap = (children) => (
+    <div style={{ minHeight: '100vh', background: '#fafaf8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ width: 360, padding: '48px 0' }}>
+        <div style={{ fontFamily: "'Noto Serif', serif", fontSize: 28, fontWeight: 300, color: '#1a1a1a', marginBottom: 8, letterSpacing: '-0.02em' }}>AskMyDocs</div>
+        <div style={{ fontFamily: "'Noto Sans JP', sans-serif", fontSize: 11, fontWeight: 300, color: '#aaa', letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 48 }}>Document Intelligence</div>
+        {children}
+        <div style={{ marginTop: 48, fontFamily: "'Noto Serif', sans-serif", fontSize: 10, color: '#ccc', letterSpacing: '0.2em', fontStyle: 'italic' }}>AskMyDocs · 2026</div>
+      </div>
+    </div>
+  )
 
-        {/* Logo */}
-        <div style={{
-          fontFamily: "'Noto Serif', serif",
-          fontSize: 28,
-          fontWeight: 300,
-          color: '#1a1a1a',
-          marginBottom: 8,
-          letterSpacing: '-0.02em',
-        }}>AskMyDocs</div>
-        <div style={{
-          fontFamily: "'Noto Sans JP', sans-serif",
-          fontSize: 11,
-          fontWeight: 300,
-          color: '#aaa',
-          letterSpacing: '0.25em',
-          textTransform: 'uppercase',
-          marginBottom: 48,
-        }}>Document Intelligence</div>
-
-        {/* Mode tabs */}
-        <div style={{ display: 'flex', borderBottom: '1px solid #d8d8d2', marginBottom: 32, gap: 0 }}>
-          {['signin', 'signup', 'phone'].map(m => (
-            <button
-              key={m}
-              onClick={() => { setMode(m); setError(''); setPassword('') }}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                borderBottom: mode === m ? '1px solid #1a1a1a' : 'none',
-                marginBottom: mode === m ? -1 : 0,
-                padding: '8px 16px 8px 0',
-                fontSize: 11,
-                fontFamily: "'Noto Sans JP', sans-serif",
-                fontWeight: mode === m ? 400 : 300,
-                letterSpacing: '0.15em',
-                textTransform: 'uppercase',
-                color: mode === m ? '#1a1a1a' : '#aaa',
-                cursor: 'pointer',
-              }}
-            >
-              {m === 'signin' ? 'Sign in' : m === 'signup' ? 'Sign up' : 'Phone'}
-            </button>
-          ))}
+  // ── Check-your-email screen ───────────────────────────────────────────────
+  if (signupDone) {
+    return wrap(
+      <>
+        <div style={{ fontSize: 18, fontWeight: 300, color: '#1a1a1a', marginBottom: 8 }}>Check your inbox</div>
+        <div style={{ fontSize: 13, color: '#666', fontFamily: "'Noto Sans JP', sans-serif", fontWeight: 300, marginBottom: 4 }}>
+          We sent a confirmation link to
         </div>
+        <div style={{ fontSize: 13, color: '#1a1a1a', fontWeight: 400, marginBottom: 32 }}>{email}</div>
+        <div style={{ fontSize: 12, color: '#aaa', fontFamily: "'Noto Sans JP', sans-serif", fontWeight: 300, marginBottom: 24 }}>
+          Click the link in the email to verify your account. Check your spam folder if you don't see it.
+        </div>
+        <button
+          className="btn-primary"
+          onClick={handleResend}
+          disabled={resendCooldown > 0 || loading}
+        >
+          {loading ? '…' : resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend email'}
+        </button>
+        <button
+          onClick={() => { setSignupDone(false); setMode('signin') }}
+          style={{ background: 'none', border: 'none', marginTop: 16, fontSize: 11, color: '#aaa', cursor: 'pointer', fontFamily: "'Noto Sans JP', sans-serif", letterSpacing: '0.1em' }}
+        >
+          Back to sign in
+        </button>
+      </>
+    )
+  }
 
-        {/* Email / Phone forms */}
-        {mode !== 'phone' ? (
-          <>
+  const pwFieldStyle = { position: 'relative', marginBottom: 12 }
+  const eyeStyle = {
+    position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+    background: 'none', border: 'none', cursor: 'pointer', color: '#aaa', padding: 0, display: 'flex',
+  }
+
+  return wrap(
+    <>
+      {/* Mode tabs */}
+      <div style={{ display: 'flex', borderBottom: '1px solid #d8d8d2', marginBottom: 32, gap: 0 }}>
+        {['signin', 'signup', 'phone'].map(m => (
+          <button
+            key={m}
+            onClick={() => { setMode(m); setError(''); setPassword(''); setConfirmPassword(''); setConfirmTouched(false) }}
+            style={{
+              background: 'transparent', border: 'none',
+              borderBottom: mode === m ? '1px solid #1a1a1a' : 'none',
+              marginBottom: mode === m ? -1 : 0,
+              padding: '8px 16px 8px 0', fontSize: 11,
+              fontFamily: "'Noto Sans JP', sans-serif",
+              fontWeight: mode === m ? 400 : 300,
+              letterSpacing: '0.15em', textTransform: 'uppercase',
+              color: mode === m ? '#1a1a1a' : '#aaa', cursor: 'pointer',
+            }}
+          >
+            {m === 'signin' ? 'Sign in' : m === 'signup' ? 'Sign up' : 'Phone'}
+          </button>
+        ))}
+      </div>
+
+      {mode !== 'phone' ? (
+        <>
+          <input
+            className="input-field"
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleEmailAuth()}
+            style={{ marginBottom: 12 }}
+          />
+
+          {/* Password with eye toggle */}
+          <div style={pwFieldStyle}>
             <input
               className="input-field"
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleEmailAuth()}
-            />
-            <input
-              className="input-field"
-              type="password"
+              type={showPassword ? 'text' : 'password'}
               placeholder={mode === 'signup' ? 'Password (min 12 characters)' : 'Password'}
               value={password}
               onChange={e => setPassword(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleEmailAuth()}
+              style={{ marginBottom: 0, paddingRight: 40 }}
             />
-            {mode === 'signup' && <StrengthMeter password={password} />}
-            <button
-              className="btn-primary"
-              onClick={handleEmailAuth}
-              disabled={!email || !password || loading || (mode === 'signup' && !getStrength(password).strong)}
-            >
-              {loading ? '…' : mode === 'signup' ? 'Create account' : 'Sign in'}
+            <button style={eyeStyle} onClick={() => setShowPassword(v => !v)} tabIndex={-1} type="button" aria-label={showPassword ? 'Hide password' : 'Show password'}>
+              <EyeIcon open={showPassword} />
             </button>
-          </>
-        ) : (
-          <>
+          </div>
+
+          {mode === 'signup' && (
+            <>
+              <StrengthMeter password={password} />
+
+              {/* Confirm password */}
+              <div style={pwFieldStyle}>
+                <input
+                  className="input-field"
+                  type={showConfirm ? 'text' : 'password'}
+                  placeholder="Confirm password"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  onBlur={() => setConfirmTouched(true)}
+                  onKeyDown={e => e.key === 'Enter' && handleEmailAuth()}
+                  style={{ marginBottom: 0, paddingRight: 40, borderColor: passwordMismatch ? '#ef4444' : undefined }}
+                  aria-invalid={passwordMismatch}
+                />
+                <button style={eyeStyle} onClick={() => setShowConfirm(v => !v)} tabIndex={-1} type="button" aria-label={showConfirm ? 'Hide password' : 'Show password'}>
+                  <EyeIcon open={showConfirm} />
+                </button>
+              </div>
+              {passwordMismatch && (
+                <div style={{ fontSize: 11, color: '#ef4444', marginBottom: 8 }}>Passwords do not match</div>
+              )}
+            </>
+          )}
+
+          <button
+            className="btn-primary"
+            onClick={handleEmailAuth}
+            disabled={
+              !email || !password || loading ||
+              (mode === 'signup' && (!getStrength(password).strong || !confirmPassword || password !== confirmPassword))
+            }
+          >
+            {loading ? '…' : mode === 'signup' ? 'Create account' : 'Sign in'}
+          </button>
+        </>
+      ) : (
+        <>
+          <input
+            className="input-field"
+            type="tel"
+            placeholder="+61 4XX XXX XXX"
+            value={phone}
+            onChange={e => setPhone(e.target.value)}
+            disabled={otpSent}
+          />
+          {otpSent && (
             <input
               className="input-field"
-              type="tel"
-              placeholder="+61 4XX XXX XXX"
-              value={phone}
-              onChange={e => setPhone(e.target.value)}
-              disabled={otpSent}
+              type="text"
+              placeholder="Enter OTP"
+              value={otp}
+              onChange={e => setOtp(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handlePhoneAuth()}
             />
-            {otpSent && (
-              <input
-                className="input-field"
-                type="text"
-                placeholder="Enter OTP"
-                value={otp}
-                onChange={e => setOtp(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handlePhoneAuth()}
-              />
-            )}
-            <button
-              className="btn-primary"
-              onClick={handlePhoneAuth}
-              disabled={!phone || loading}
-            >
-              {loading ? '…' : otpSent ? 'Verify OTP' : 'Send OTP'}
-            </button>
-          </>
-        )}
+          )}
+          <button
+            className="btn-primary"
+            onClick={handlePhoneAuth}
+            disabled={!phone || loading}
+          >
+            {loading ? '…' : otpSent ? 'Verify OTP' : 'Send OTP'}
+          </button>
+        </>
+      )}
 
-        {error && (
-          <div style={{
-            marginTop: 16,
-            fontSize: 12,
-            fontFamily: "'Noto Sans JP', sans-serif",
-            fontWeight: 300,
-            color: isSuccess ? '#3a7a3a' : '#7a3a3a',
-            borderLeft: `2px solid ${isSuccess ? '#3a7a3a' : '#7a3a3a'}`,
-            padding: '8px 12px',
-          }}>
-            {error}
-          </div>
-        )}
-
-        <div style={{ marginTop: 48, fontFamily: "'Noto Serif', sans-serif", fontSize: 10, color: '#ccc', letterSpacing: '0.2em', fontStyle: 'italic' }}>
-          AskMyDocs · 2026
+      {error && (
+        <div style={{
+          marginTop: 16, fontSize: 12,
+          fontFamily: "'Noto Sans JP', sans-serif", fontWeight: 300,
+          color: '#7a3a3a', borderLeft: '2px solid #7a3a3a', padding: '8px 12px',
+        }}>
+          {error}
         </div>
-      </div>
-    </div>
+      )}
+    </>
   )
 }

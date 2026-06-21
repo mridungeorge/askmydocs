@@ -39,8 +39,10 @@ export function useResearch() {
       es.onmessage = (e) => {
         const data = JSON.parse(e.data)
 
-        // Terminal status — pipeline finished or errored
-        if (data.status === 'done' || data.status === 'error') {
+        // Terminal status — pipeline finished or errored.
+        // Agent progress events also carry status:'done'/'start', so guard with !data.agent
+        // to distinguish the pipeline-level terminal event (which has no agent field).
+        if (!data.agent && (data.status === 'done' || data.status === 'error')) {
           es.close()
           if (data.status === 'done') {
             fetch(`${API}/api/research/result/${job_id}`)

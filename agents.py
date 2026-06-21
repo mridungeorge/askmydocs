@@ -48,7 +48,7 @@ MODELS = {
 MAX_ROUNDS             = 3
 MAX_RETRIES            = 2
 MAX_CONFIDENCE_RETRIES = 3   # re-augment papers if confidence < CONFIDENCE_THRESHOLD
-CONFIDENCE_THRESHOLD   = 0.80
+CONFIDENCE_THRESHOLD   = 0.35
 EMBEDDINGS_MODEL       = os.getenv("EMBEDDINGS_MODEL", "nvidia/nv-embedqa-e5-v5")
 
 _client    = None

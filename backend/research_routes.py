@@ -51,7 +51,6 @@ async def _run_pipeline(job_id: str, topic: str) -> None:
             for ev in _rp.drain():
                 JOBS[job_id]["events"].append(ev)
             await asyncio.sleep(0.1)
-        # Final drain after pipeline finishes
         for ev in _rp.drain():
             JOBS[job_id]["events"].append(ev)
 
@@ -59,35 +58,78 @@ async def _run_pipeline(job_id: str, topic: str) -> None:
     try:
         compiled = _rg.build_graph()
         init     = _rs.initial_state(topic)
-        final    = await asyncio.wait_for(
-            compiled.ainvoke(init, config={"recursion_limit": 60}),
-            timeout=PIPELINE_TIMEOUT,
-        )
+
+        # Run without wait_for wrapper — wait_for interacts badly with LangGraph's
+        # internal checkpoint system and causes it to return the state after the first
+        # node (topic_planner) instead of the fully accumulated final state.
+        # The per-agent timeouts (phase_1=120s, writer=90s, critic=90s) are sufficient.
+        final = await compiled.ainvoke(init, config={"recursion_limit": 60})
+
         final_dict = dict(final)
-        # Detect silently-truncated runs (LangGraph hit recursion limit without raising)
-        if not final_dict.get("final_verdict") and not final_dict.get("draft"):
+
+        # Diagnostic log — visible in Railway deploy logs
+        print(
+            f"[pipeline] job={job_id[:8]} "
+            f"verdict={final_dict.get('final_verdict')!r} "
+            f"papers={len(final_dict.get('papers') or [])} "
+            f"round={final_dict.get('round_num')!r} "
+            f"conf={final_dict.get('confidence')!r} "
+            f"draft_chars={len(final_dict.get('draft') or '')}"
+        )
+
+        # Detect incomplete run (planner-only state leaking out)
+        has_useful_output = (
+            final_dict.get("draft")
+            or final_dict.get("final_verdict")
+            or final_dict.get("papers")
+            or (final_dict.get("round_num") or 0) > 0
+        )
+        if not has_useful_output:
             JOBS[job_id]["status"] = "error"
             JOBS[job_id]["error"]  = (
-                "Pipeline did not complete — the graph may have exceeded its step limit "
-                "or the LLM API is unavailable. Check NVIDIA_API_KEY and try again."
+                "Pipeline returned empty state — likely cause: NVIDIA_API_KEY is missing "
+                "or the LLM API is unreachable from Railway. "
+                "Check Railway → Variables → NVIDIA_API_KEY."
             )
         else:
             JOBS[job_id]["status"] = "done"
             JOBS[job_id]["state"]  = final_dict
+
     except asyncio.TimeoutError:
         JOBS[job_id]["status"] = "error"
         JOBS[job_id]["error"]  = f"Pipeline timed out after {PIPELINE_TIMEOUT // 60} minutes"
-    except Exception as exc:
+    except BaseException as exc:
+        # BaseException catches CancelledError too (Python 3.11+)
+        print(f"[pipeline] job={job_id[:8]} EXCEPTION: {type(exc).__name__}: {exc}")
         JOBS[job_id]["status"] = "error"
-        JOBS[job_id]["error"]  = str(exc)
+        JOBS[job_id]["error"]  = f"{type(exc).__name__}: {exc}"
     finally:
-        await asyncio.sleep(0.4)   # let collector do one last drain
+        await asyncio.sleep(0.5)
         collector.cancel()
-        # Free numpy embedding store to reclaim memory between runs
         _ra._rag_store.clear()
 
 
 # ── Endpoints ───────────────────────────────────────────────────────────────────
+
+@router.get("/api/research/health")
+async def research_health():
+    """Diagnostic endpoint — tests NVIDIA API connectivity. Check this first when pipeline fails."""
+    import os
+    nvidia_key = os.getenv("NVIDIA_API_KEY")
+    if not nvidia_key:
+        return {"ok": False, "error": "NVIDIA_API_KEY not set in Railway environment variables"}
+    try:
+        result = await asyncio.to_thread(
+            _ra._chat,
+            [{"role": "user", "content": "Reply with the single word: OK"}],
+            max_tokens=5,
+            model="meta/llama-3.1-8b-instruct",
+            timeout=15.0,
+        )
+        return {"ok": True, "response": result.strip(), "key_prefix": nvidia_key[:8] + "..."}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "key_prefix": nvidia_key[:8] + "..."}
+
 
 @router.post("/api/research/start")
 async def start_research(http_req: Request, req: StartRequest):

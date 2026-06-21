@@ -37,11 +37,12 @@ from agents import (
 async def phase_1(state: AgentState) -> AgentState:
     """Run Ingestion, Currency, and Memory in parallel. Hard 120s timeout."""
     try:
-        ingestion_result, currency_result, memory_result = await asyncio.wait_for(
+        results = await asyncio.wait_for(
             asyncio.gather(
                 ingestion_agent(dict(state)),
                 currency_agent(dict(state)),
                 memory_agent(dict(state)),
+                return_exceptions=True,  # individual agent failures don't kill the phase
             ),
             timeout=120,
         )
@@ -56,12 +57,32 @@ async def phase_1(state: AgentState) -> AgentState:
         state["memory_context"]   = state.get("memory_context") or "Skipped (timeout)"
         return state
 
-    state["papers"]           = ingestion_result["papers"]
-    state["search_results"]   = currency_result["search_results"]
-    state["currency_verdict"] = currency_result["currency_verdict"]
-    state["currency_score"]   = currency_result["currency_score"]
-    state["currency_reason"]  = currency_result["currency_reason"]
-    state["memory_context"]   = memory_result["memory_context"]
+    ingestion_result, currency_result, memory_result = results
+
+    if isinstance(ingestion_result, Exception):
+        print(f"  [phase_1] ingestion failed: {ingestion_result}")
+        state["papers"] = []
+    else:
+        state["papers"] = ingestion_result["papers"]
+
+    if isinstance(currency_result, Exception):
+        print(f"  [phase_1] currency failed: {currency_result}")
+        state["search_results"]   = []
+        state["currency_verdict"] = "UNKNOWN"
+        state["currency_score"]   = 0.0
+        state["currency_reason"]  = f"Currency check failed: {currency_result}"
+    else:
+        state["search_results"]   = currency_result["search_results"]
+        state["currency_verdict"] = currency_result["currency_verdict"]
+        state["currency_score"]   = currency_result["currency_score"]
+        state["currency_reason"]  = currency_result["currency_reason"]
+
+    if isinstance(memory_result, Exception):
+        print(f"  [phase_1] memory failed: {memory_result}")
+        state["memory_context"] = "Memory check skipped (error)"
+    else:
+        state["memory_context"] = memory_result["memory_context"]
+
     return state
 
 

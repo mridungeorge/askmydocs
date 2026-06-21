@@ -1,16 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { createClient } from '@supabase/supabase-js'
 import axios from 'axios'
+import { supabase, setServerSession, clearServerSession } from '../lib/supabase'
 
-const API_URL       = import.meta.env.VITE_API_URL    || 'https://web-production-203a0.up.railway.app'
-const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL
-const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY
+const API_URL = import.meta.env.VITE_API_URL || 'https://web-production-203a0.up.railway.app'
 
-const supabase = (SUPABASE_URL && SUPABASE_ANON)
-  ? createClient(SUPABASE_URL, SUPABASE_ANON)
-  : null
-
-const api = axios.create({ baseURL: API_URL })
+// Axios sends cookies automatically with credentials: 'include'
+// The httpOnly sb-session cookie is the primary auth credential.
+// The Authorization header is kept as a fallback for API clients.
+const api = axios.create({ baseURL: API_URL, withCredentials: true })
 api.interceptors.request.use(async (config) => {
   if (supabase) {
     const { data: { session } } = await supabase.auth.getSession()
@@ -37,8 +34,12 @@ export function useAuth() {
       setUser(session?.user ?? null)
       setLoading(false)
     })
+    // Promote token to httpOnly cookie whenever auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => setUser(session?.user ?? null)
+      async (_event, session) => {
+        setUser(session?.user ?? null)
+        if (session) await setServerSession(session)
+      }
     )
     return () => subscription.unsubscribe()
   }, [])
@@ -49,11 +50,19 @@ export function useAuth() {
       provider: 'google',
       options: { redirectTo: window.location.origin },
     }),
-    signInWithEmail: (email, password) => supabase?.auth.signInWithPassword({ email, password }),
+    signInWithEmail: async (email, password) => {
+      const res = await supabase?.auth.signInWithPassword({ email, password })
+      if (res?.data?.session) await setServerSession(res.data.session)
+      return res
+    },
     signUpWithEmail: (email, password) => supabase?.auth.signUp({ email, password }),
     signInWithPhone: (phone) => supabase?.auth.signInWithOtp({ phone }),
-    verifyOtp: (phone, token) => supabase?.auth.verifyOtp({ phone, token, type: 'sms' }),
-    signOut: () => supabase?.auth.signOut(),
+    verifyOtp: async (phone, token) => {
+      const res = await supabase?.auth.verifyOtp({ phone, token, type: 'sms' })
+      if (res?.data?.session) await setServerSession(res.data.session)
+      return res
+    },
+    signOut: clearServerSession,
   }
 }
 

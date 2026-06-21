@@ -1,7 +1,62 @@
 import { useState } from 'react'
 
+// ── Password strength ─────────────────────────────────────────────────────────
+function getStrength(pw) {
+  const checks = [
+    { label: 'At least 12 characters',  ok: pw.length >= 12 },
+    { label: 'Uppercase letter',         ok: /[A-Z]/.test(pw) },
+    { label: 'Lowercase letter',         ok: /[a-z]/.test(pw) },
+    { label: 'Number',                   ok: /[0-9]/.test(pw) },
+    { label: 'Special character',        ok: /[^A-Za-z0-9]/.test(pw) },
+  ]
+  const score = checks.filter(c => c.ok).length
+  return { checks, score, strong: score === 5 }
+}
+
+async function isBreached(password) {
+  try {
+    const buf  = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(password))
+    const hex  = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase()
+    const res  = await fetch(`https://api.pwnedpasswords.com/range/${hex.slice(0, 5)}`)
+    const text = await res.text()
+    return text.split('\n').some(line => line.startsWith(hex.slice(5)))
+  } catch {
+    return false  // Network error — don't block signup
+  }
+}
+
+const STRENGTH_COLORS = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#16a34a']
+const STRENGTH_LABELS = ['Very weak', 'Weak', 'Fair', 'Good', 'Strong']
+
+function StrengthMeter({ password }) {
+  if (!password) return null
+  const { checks, score } = getStrength(password)
+  const color = STRENGTH_COLORS[score - 1] || '#e5e7eb'
+  const label = STRENGTH_LABELS[score - 1] || ''
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 6 }}>
+        {[1,2,3,4,5].map(i => (
+          <div key={i} style={{
+            flex: 1, height: 3, borderRadius: 2,
+            background: i <= score ? color : '#e5e7eb',
+            transition: 'background 0.2s',
+          }} />
+        ))}
+      </div>
+      <div style={{ fontSize: 11, color, fontWeight: 500, marginBottom: 4 }}>{label}</div>
+      {checks.filter(c => !c.ok).map(c => (
+        <div key={c.label} style={{ fontSize: 11, color: '#9ca3af', display: 'flex', gap: 4, alignItems: 'center' }}>
+          <span>✕</span> {c.label}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+
 export default function AuthPage({ onSignInGoogle, onSignInEmail, onSignUp, onSignInPhone, onVerifyOtp }) {
-  const [mode, setMode]         = useState('signin')  // signin | signup | phone
+  const [mode, setMode]         = useState('signin')
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
   const [phone, setPhone]       = useState('')
@@ -10,11 +65,23 @@ export default function AuthPage({ onSignInGoogle, onSignInEmail, onSignUp, onSi
   const [error, setError]       = useState('')
   const [loading, setLoading]   = useState(false)
 
+  const isSuccess = error.includes('Check') || error.includes('sent')
+
   const handleEmailAuth = async () => {
     setLoading(true)
     setError('')
     try {
       if (mode === 'signup') {
+        const { score, strong } = getStrength(password)
+        if (!strong) {
+          setError('Password too weak — please meet all 5 requirements.')
+          return
+        }
+        const breached = await isBreached(password)
+        if (breached) {
+          setError('This password has appeared in a data breach. Please choose a different one.')
+          return
+        }
         await onSignUp(email, password)
         setError('Check your email for a confirmation link.')
       } else {
@@ -75,16 +142,11 @@ export default function AuthPage({ onSignInGoogle, onSignInEmail, onSignUp, onSi
         }}>Document Intelligence</div>
 
         {/* Mode tabs */}
-        <div style={{
-          display: 'flex',
-          borderBottom: '1px solid #d8d8d2',
-          marginBottom: 32,
-          gap: 0,
-        }}>
+        <div style={{ display: 'flex', borderBottom: '1px solid #d8d8d2', marginBottom: 32, gap: 0 }}>
           {['signin', 'signup', 'phone'].map(m => (
             <button
               key={m}
-              onClick={() => { setMode(m); setError('') }}
+              onClick={() => { setMode(m); setError(''); setPassword('') }}
               style={{
                 background: 'transparent',
                 border: 'none',
@@ -135,16 +197,8 @@ export default function AuthPage({ onSignInGoogle, onSignInEmail, onSignUp, onSi
           Continue with Google
         </button>
 
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          marginBottom: 24,
-          color: '#d8d8d2',
-          fontSize: 11,
-        }}>
-          <div style={{ flex: 1, height: 1, background: '#d8d8d2' }} />
-          or
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24, color: '#d8d8d2', fontSize: 11 }}>
+          <div style={{ flex: 1, height: 1, background: '#d8d8d2' }} />or
           <div style={{ flex: 1, height: 1, background: '#d8d8d2' }} />
         </div>
 
@@ -162,15 +216,16 @@ export default function AuthPage({ onSignInGoogle, onSignInEmail, onSignUp, onSi
             <input
               className="input-field"
               type="password"
-              placeholder="Password"
+              placeholder={mode === 'signup' ? 'Password (min 12 characters)' : 'Password'}
               value={password}
               onChange={e => setPassword(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleEmailAuth()}
             />
+            {mode === 'signup' && <StrengthMeter password={password} />}
             <button
               className="btn-primary"
               onClick={handleEmailAuth}
-              disabled={!email || !password || loading}
+              disabled={!email || !password || loading || (mode === 'signup' && !getStrength(password).strong)}
             >
               {loading ? '…' : mode === 'signup' ? 'Create account' : 'Sign in'}
             </button>
@@ -211,22 +266,15 @@ export default function AuthPage({ onSignInGoogle, onSignInEmail, onSignUp, onSi
             fontSize: 12,
             fontFamily: "'Noto Sans JP', sans-serif",
             fontWeight: 300,
-            color: error.includes('Check') || error.includes('sent') ? '#3a7a3a' : '#7a3a3a',
-            borderLeft: `2px solid ${error.includes('Check') || error.includes('sent') ? '#3a7a3a' : '#7a3a3a'}`,
+            color: isSuccess ? '#3a7a3a' : '#7a3a3a',
+            borderLeft: `2px solid ${isSuccess ? '#3a7a3a' : '#7a3a3a'}`,
             padding: '8px 12px',
           }}>
             {error}
           </div>
         )}
 
-        <div style={{
-          marginTop: 48,
-          fontFamily: "'Noto Serif', sans-serif",
-          fontSize: 10,
-          color: '#ccc',
-          letterSpacing: '0.2em',
-          fontStyle: 'italic',
-        }}>
+        <div style={{ marginTop: 48, fontFamily: "'Noto Serif', sans-serif", fontSize: 10, color: '#ccc', letterSpacing: '0.2em', fontStyle: 'italic' }}>
           AskMyDocs · 2026
         </div>
       </div>

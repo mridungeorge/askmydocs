@@ -1,101 +1,108 @@
 """
 Auth middleware for FastAPI.
-Every protected endpoint calls get_current_user() which:
-1. Reads the Authorization: Bearer <token> header
-2. Validates the JWT against Supabase
-3. Returns the user_id if valid
-4. Raises 401 if invalid or missing
 
-Why JWT: Supabase issues a JWT when a user logs in.
-The React app stores this token and sends it with every request.
-The backend validates it without hitting Supabase on every call
-(JWT is self-contained — validation is local crypto, not a network call).
+Session strategy:
+- Frontend stores NO tokens in localStorage (memory-only Supabase client).
+- After login the frontend POSTs the access_token to /api/auth/session.
+- FastAPI sets a httpOnly, Secure, SameSite=Lax cookie named "sb-session".
+- Every protected endpoint reads that cookie (falls back to Authorization header
+  for API clients / backwards-compat).
+- Token is validated against Supabase on every request (get_user is a local JWT
+  decode — no extra network call).
+
+Email verification:
+- get_current_user raises 403 if email_confirmed_at is None (unverified users
+  can sign in but cannot access any write/sensitive endpoint).
+
+Rate limiting (see api.py):
+- Login / signup / password-reset: 5 attempts per 15 min per IP+email (Upstash).
 """
 
-from fastapi import Depends, HTTPException, status
+import os
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from supabase import create_client, Client
 from backend.config import SUPABASE_URL, SUPABASE_SERVICE_KEY, DEBUG_MODE
 
-# Service role client — only used server-side, never exposed to frontend
-# Initialize lazily to handle missing env vars gracefully
 supabase: Client = None
 
-def get_supabase():
+def get_supabase() -> Client | None:
     global supabase
     if supabase is None:
         if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-            # Demo mode if env vars not set
             return None
         supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
     return supabase
 
+
 security = HTTPBearer(auto_error=False)
 
 
+def _resolve_token(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None,
+) -> str | None:
+    """Cookie → Authorization header, in that priority order."""
+    token = request.cookies.get("sb-session")
+    if not token and credentials:
+        token = credentials.credentials
+    return token
+
+
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> str:
     """
-    Validate JWT and return user_id.
-    In debug/demo mode, auto-generate a demo user if no credentials provided.
+    Validate session and return user_id.
+    Reads from httpOnly cookie first, then Authorization: Bearer header.
+    Enforces email verification for all callers.
     """
-    # Debug mode: auto-use demo user if no credentials
-    if DEBUG_MODE and not credentials:
+    if DEBUG_MODE and not _resolve_token(request, credentials):
         return "debug_test_user"
-    
-    if not credentials:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authentication token",
-        )
-    
-    token = credentials.credentials
-    
-    # Demo mode: extract user_id from token like "demo_token_demo_user_001"
+
+    token = _resolve_token(request, credentials)
+    if not token:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not authenticated")
+
     if token.startswith("demo_token_"):
-        user_id = token.replace("demo_token_", "")
-        return user_id if user_id else "demo_user"
-    
-    # Production mode: validate with Supabase
+        return token.replace("demo_token_", "") or "demo_user"
+
     sb = get_supabase()
     if sb is None:
-        # No Supabase configured, use demo extraction
-        if DEBUG_MODE:
-            return "debug_test_user"
-        return "demo_user_default"
+        return "debug_test_user" if DEBUG_MODE else "demo_user_default"
 
     try:
-        user = sb.auth.get_user(token)
-        if not user or not user.user:
+        resp = sb.auth.get_user(token)
+        user = resp.user if resp else None
+        if not user:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token")
+
+        # Block unverified email accounts from sensitive endpoints
+        if user.email and not user.email_confirmed_at:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication token",
+                status.HTTP_403_FORBIDDEN,
+                "Email address not verified. Check your inbox for a confirmation link.",
             )
-        return user.user.id
 
+        return user.id
+
+    except HTTPException:
+        raise
     except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-        )
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Could not validate credentials")
 
+
+# ── Helpers used by api.py ────────────────────────────────────────────────────
 
 def get_user_collection(user_id: str) -> str:
-    """
-    Each user gets their own Qdrant collection.
-    Format: askmydocs_user_<first 8 chars of UUID>
-    Why 8 chars: Qdrant collection names have length limits.
-    """
     return f"askmydocs_user_{user_id[:8]}"
 
 
 def log_document(user_id: str, title: str, source_type: str, chunk_count: int):
-    """Store document metadata in Supabase for this user."""
     sb = get_supabase()
     if sb is None:
-        return  # Demo mode: skip database logging
-    
+        return
     try:
         sb.table("documents").insert({
             "user_id":     user_id,
@@ -108,17 +115,17 @@ def log_document(user_id: str, title: str, source_type: str, chunk_count: int):
 
 
 def get_user_documents(user_id: str) -> list[dict]:
-    """Get all documents for this user from Supabase."""
     sb = get_supabase()
     if sb is None:
-        return []  # Demo mode: return empty list
-    
+        return []
     try:
-        result = sb.table("documents") \
-            .select("*") \
-            .eq("user_id", user_id) \
-            .order("created_at", desc=True) \
+        result = (
+            sb.table("documents")
+            .select("*")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
             .execute()
+        )
         return result.data
     except Exception as e:
         print(f"Error getting documents: {e}")
@@ -126,11 +133,9 @@ def get_user_documents(user_id: str) -> list[dict]:
 
 
 def log_conversation(user_id: str, doc_title: str, role: str, content: str):
-    """Store a conversation message in Supabase."""
     sb = get_supabase()
     if sb is None:
-        return  # Demo mode: skip database logging
-    
+        return
     try:
         sb.table("conversations").insert({
             "user_id":   user_id,

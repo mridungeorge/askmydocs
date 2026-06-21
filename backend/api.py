@@ -2,13 +2,13 @@
 FastAPI v4 — LangGraph agents + semantic caching + streaming.
 """
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Depends
+from fastapi import FastAPI, HTTPException, UploadFile, File, Depends, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from backend.auth import (
-    get_current_user, get_user_collection,
+    get_current_user, get_supabase, get_user_collection,
     log_document, get_user_documents, log_conversation,
 )
 from backend.ingest import ingest, extract_from_url, extract_from_pdf
@@ -23,6 +23,42 @@ import os
 import json
 import time
 import asyncio
+
+# ── Upstash rate limiter ──────────────────────────────────────────────────────
+try:
+    from upstash_redis import Redis as _UpstashRedis
+    _rl_redis = _UpstashRedis(
+        url=os.getenv("UPSTASH_REDIS_URL", ""),
+        token=os.getenv("UPSTASH_REDIS_TOKEN", ""),
+    ) if os.getenv("UPSTASH_REDIS_URL") else None
+except Exception:
+    _rl_redis = None
+
+def _rate_limit(identifier: str, endpoint: str, limit: int = 5, window: int = 900):
+    """5 attempts / 15 min per IP+endpoint. Silent if Redis not configured."""
+    if _rl_redis is None:
+        return
+    key = f"rl:{endpoint}:{identifier}"
+    try:
+        count = _rl_redis.incr(key)
+        if count == 1:
+            _rl_redis.expire(key, window)
+        if count > limit:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Too many attempts — try again in {window // 60} minutes.",
+                headers={"Retry-After": str(window)},
+            )
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # Redis failure should never block auth
+
+# ── Cookie constants ──────────────────────────────────────────────────────────
+_COOKIE_NAME    = "sb-session"
+_COOKIE_MAX_AGE = 3600          # 1 hour — matches Supabase JWT expiry
+_IS_PROD        = os.getenv("RAILWAY_ENVIRONMENT") == "production" or os.getenv("ENV") == "production"
+
 
 app = FastAPI(title="AskMyDocs API", version="4.0.0")
 
@@ -70,6 +106,53 @@ class ChatResponse(BaseModel):
     quality_score:   float = 0.0
     cache_hit:       str   = ""
     rewritten_query: str   = ""
+
+
+# ── Auth cookie endpoints ──────────────────────────────────────────────────────
+
+class SessionRequest(BaseModel):
+    access_token:  str
+    refresh_token: str = ""
+
+@app.post("/api/auth/session")
+async def set_session(req: Request, body: SessionRequest, response: Response):
+    """
+    Called by the frontend immediately after Supabase login.
+    Validates the token server-side then promotes it to an httpOnly cookie.
+    The frontend never reads the token from localStorage — it uses memory storage.
+    Rate-limited: 5 calls / 15 min per IP.
+    """
+    ip = req.client.host if req.client else "unknown"
+    _rate_limit(f"{ip}", "set-session", limit=5, window=900)
+
+    sb = get_supabase()
+    if sb:
+        try:
+            resp = sb.auth.get_user(body.access_token)
+            if not resp or not resp.user:
+                raise HTTPException(401, "Invalid token")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(401, "Could not validate token")
+
+    response.set_cookie(
+        key=_COOKIE_NAME,
+        value=body.access_token,
+        httponly=True,
+        secure=_IS_PROD,
+        samesite="lax",
+        max_age=_COOKIE_MAX_AGE,
+        path="/",
+    )
+    return {"ok": True}
+
+
+@app.post("/api/auth/logout")
+async def logout(response: Response):
+    """Clears the session cookie."""
+    response.delete_cookie(key=_COOKIE_NAME, path="/")
+    return {"ok": True}
 
 
 # ── Public endpoints ──────────────────────────────────────────────────────────

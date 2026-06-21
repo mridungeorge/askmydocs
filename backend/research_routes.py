@@ -70,9 +70,18 @@ async def _run_pipeline(job_id: str, topic: str) -> None:
 # ── Endpoints ───────────────────────────────────────────────────────────────────
 
 @router.post("/api/research/start")
-async def start_research(req: StartRequest):
+async def start_research(http_req: Request, req: StartRequest):
     if not req.topic.strip():
         raise HTTPException(status_code=400, detail="topic is required")
+    # Rate limit: 10 pipeline runs / hour per IP (pipeline is expensive)
+    try:
+        from backend.api import _rate_limit
+        ip = http_req.client.host if http_req.client else "unknown"
+        _rate_limit(ip, "research-start", limit=10, window=3600)
+    except HTTPException:
+        raise
+    except Exception:
+        pass
     job_id = str(uuid.uuid4())
     JOBS[job_id] = {"status": "running", "events": [], "state": None, "error": None}
     asyncio.create_task(_run_pipeline(job_id, req.topic.strip()))

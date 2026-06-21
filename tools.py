@@ -17,7 +17,7 @@ def _get_async_fetcher():
     try:
         from scrapling.fetchers import AsyncFetcher
         return AsyncFetcher()
-    except ImportError:
+    except Exception:
         return None
 
 

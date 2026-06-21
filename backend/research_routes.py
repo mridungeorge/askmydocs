@@ -17,7 +17,7 @@ import graph    as _rg    # root graph
 import state    as _rs    # root state
 import progress as _rp    # shared progress queue
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 

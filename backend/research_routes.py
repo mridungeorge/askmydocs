@@ -41,7 +41,7 @@ class ChatRequest(BaseModel):
 
 # ── Background pipeline task ────────────────────────────────────────────────────
 
-PIPELINE_TIMEOUT = 600  # 10 minutes hard limit
+PIPELINE_TIMEOUT = 900  # 15 minutes hard limit
 
 
 async def _run_pipeline_async(job_id: str, topic: str) -> None:

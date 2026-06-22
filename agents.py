@@ -614,7 +614,7 @@ async def paper_augmentation_agent(state: dict) -> dict:
     ]
 
     try:
-        results_all = await asyncio.wait_for(asyncio.gather(*fetch_tasks), timeout=30)
+        results_all = await asyncio.wait_for(asyncio.gather(*fetch_tasks), timeout=60)
         for results in results_all:
             for p in results:
                 key = p.get("title", "")[:60].lower()

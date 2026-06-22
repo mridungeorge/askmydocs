@@ -40,14 +40,13 @@ async def search_semantic_scholar(query: str, limit: int = 5,
         params["year"] = f"{year_from or ''}-{year_to or ''}"
 
     data = None
-    for attempt in range(3):
+    for attempt in range(2):
         try:
             async with httpx.AsyncClient(timeout=15, headers=HEADERS, verify=False) as client:
                 r = await client.get(url, params=params)
                 if r.status_code == 429:
-                    wait = 5 * (attempt + 1)
-                    print(f"  [semantic_scholar] 429 — retrying in {wait}s...")
-                    await _asyncio.sleep(wait)
+                    print(f"  [semantic_scholar] 429 — retrying in 3s...")
+                    await _asyncio.sleep(3)
                     continue
                 r.raise_for_status()
                 data = r.json()

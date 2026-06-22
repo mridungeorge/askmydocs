@@ -66,16 +66,28 @@ def get_client() -> OpenAI:
 
 
 def _chat(messages: list[dict], max_tokens: int = 500, model: str | None = None,
-          timeout: float = 45.0) -> str:
+          timeout: float = 60.0) -> str:
+    import time as _time
     client = get_client()
-    response = client.chat.completions.create(
-        model=model or MODELS["writer"],
-        messages=messages,
-        max_tokens=max_tokens,
-        temperature=0.2,
-        timeout=timeout,
-    )
-    return response.choices[0].message.content or ""
+    for attempt in range(3):
+        try:
+            response = client.chat.completions.create(
+                model=model or MODELS["writer"],
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=0.2,
+                timeout=timeout,
+            )
+            return response.choices[0].message.content or ""
+        except Exception as exc:
+            name = type(exc).__name__
+            if "Timeout" in name or "timeout" in str(exc).lower():
+                if attempt < 2:
+                    wait = 5 * (attempt + 1)
+                    print(f"  [llm] {name} (attempt {attempt+1}/3) — retrying in {wait}s")
+                    _time.sleep(wait)
+                    continue
+            raise
 
 
 def _extract_json(text: str) -> dict:
@@ -763,7 +775,7 @@ async def writer_agent(state: dict) -> dict:
         ],
         max_tokens=1100,
         model=MODELS["writer"],
-        timeout=90,
+        timeout=120,
     )
     state["draft"] = reply
     _prog.push("writer", "done", "Draft ready")
@@ -830,7 +842,7 @@ async def critic2_agent(state: dict) -> dict:
         ],
         max_tokens=600,
         model=MODELS["critic"],
-        timeout=90,
+        timeout=120,
     )
 
     data    = _extract_json(reply)

@@ -10,8 +10,9 @@ const PILLS = [
   { label: 'Bibliography',      prompt: 'Format a bibliography in APA 7th edition using all source papers from the research.' },
 ]
 
-export default function ThesisChat({ researchResult }) {
-  const { messages, streaming, send, clear } = useThesisChat()
+export default function ThesisChat({ researchResult, chatHook }) {
+  const fallback = useThesisChat()
+  const { messages, streaming, send, clear } = chatHook || fallback
   const [input, setInput] = useState('')
   const bottomRef = useRef(null)
 

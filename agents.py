@@ -45,9 +45,9 @@ MODELS = {
     "critic": os.getenv("LLM_CRITIC", "meta/llama-3.1-70b-instruct"),  # free — academic review
 }
 
-MAX_ROUNDS             = 3
+MAX_ROUNDS             = 5
 MAX_RETRIES            = 2
-MAX_CONFIDENCE_RETRIES = 3   # re-augment papers if confidence < CONFIDENCE_THRESHOLD
+MAX_CONFIDENCE_RETRIES = 4   # re-augment papers if confidence < CONFIDENCE_THRESHOLD
 CONFIDENCE_THRESHOLD   = 0.35
 EMBEDDINGS_MODEL       = os.getenv("EMBEDDINGS_MODEL", "nvidia/nv-embedqa-e5-v5")
 
@@ -934,11 +934,8 @@ THESIS_SECTION_GUIDES = {
 }
 
 
-def chat_with_research(
-    user_message: str,
-    result: dict,
-    history: list[dict],
-) -> str:
+def _build_chat_messages(user_message: str, result: dict, history: list[dict]) -> list[dict]:
+    """Build the message list for the thesis chat agent."""
     topic   = result.get("topic", "")
     draft   = result.get("draft", "")
     papers  = result.get("papers", [])
@@ -946,7 +943,6 @@ def chat_with_research(
     verdict = result.get("currency_verdict", "")
     reason  = result.get("currency_reason", "")
 
-    # Rich paper list with abstracts for the chat agent to cite from
     paper_entries = []
     for p in papers[:20]:
         entry = (
@@ -957,7 +953,6 @@ def chat_with_research(
         paper_entries.append(entry)
     paper_list = "\n".join(paper_entries) if paper_entries else "No papers available."
 
-    # Detect if user is asking for a specific thesis section
     section_guide = ""
     msg_lower = user_message.lower()
     for section, guide in THESIS_SECTION_GUIDES.items():
@@ -978,15 +973,47 @@ def chat_with_research(
         f"{draft[:4000]}\n"
         f"{section_guide}\n"
         "RULES:\n"
+        "- Every factual claim MUST have an inline citation: (Author et al., Year)\n"
         "- Cite ONLY papers in the SOURCE PAPERS list above\n"
-        "- APA 7th inline citation: (Author et al., Year)\n"
+        "- APA 7th inline citation format: (Author et al., Year)\n"
         "- Academic register — no bullet points in prose sections\n"
-        "- Be specific and substantive; if evidence is thin, say so\n"
+        "- Be specific and substantive; if evidence is thin, say so explicitly\n"
         "- Do not repeat content already well-covered in the Research Snapshot"
     )
 
     messages = [{"role": "system", "content": system}]
     messages += history[-12:]
     messages.append({"role": "user", "content": user_message})
+    return messages
 
+
+def chat_with_research(
+    user_message: str,
+    result: dict,
+    history: list[dict],
+) -> str:
+    messages = _build_chat_messages(user_message, result, history)
     return _chat(messages, max_tokens=1400, model=MODELS["writer"])
+
+
+def stream_chat_with_research(
+    user_message: str,
+    result: dict,
+    history: list[dict],
+    on_token,           # callable(str) — called for each streamed token
+) -> None:
+    """Stream thesis-chat tokens via callback. Runs synchronously in a thread."""
+    messages = _build_chat_messages(user_message, result, history)
+    client   = get_client()
+    stream   = client.chat.completions.create(
+        model=MODELS["writer"],
+        messages=messages,
+        max_tokens=1400,
+        temperature=0.2,
+        stream=True,
+        timeout=120.0,
+    )
+    for chunk in stream:
+        delta = chunk.choices[0].delta.content
+        if delta:
+            on_token(delta)

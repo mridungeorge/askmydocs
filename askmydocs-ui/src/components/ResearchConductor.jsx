@@ -1,8 +1,9 @@
-import { useState }        from 'react'
-import { useResearch }     from '../hooks/useResearch'
-import PipelineDiagram     from './PipelineDiagram'
-import LiveLog             from './LiveLog'
-import ThesisChat          from './ThesisChat'
+import { useState, useRef }  from 'react'
+import { useResearch }       from '../hooks/useResearch'
+import { useThesisChat }     from '../hooks/useThesisChat'
+import PipelineDiagram       from './PipelineDiagram'
+import LiveLog               from './LiveLog'
+import ThesisChat            from './ThesisChat'
 
 const CURRENCY_COLORS = {
   EMERGING:  { bg: '#f0fdf4', text: '#15803d', border: '#86efac' },
@@ -30,7 +31,7 @@ function MetricChip({ label, value, highlight }) {
   )
 }
 
-function OutstandingIssues({ issues = [] }) {
+function OutstandingIssues({ issues = [], onFixAll, fixing }) {
   if (!issues.length) return null
   return (
     <div style={{
@@ -39,9 +40,29 @@ function OutstandingIssues({ issues = [] }) {
       borderRadius: 10,
       padding:      16,
     }}>
-      <h4 style={{ fontSize: 13, fontWeight: 600, color: '#92400e', marginBottom: 10 }}>
-        Outstanding Issues ({issues.length})
-      </h4>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <h4 style={{ fontSize: 13, fontWeight: 600, color: '#92400e', margin: 0 }}>
+          Outstanding Issues ({issues.length})
+        </h4>
+        {onFixAll && (
+          <button
+            onClick={onFixAll}
+            disabled={fixing}
+            style={{
+              padding:      '5px 14px',
+              borderRadius: 8,
+              border:       'none',
+              background:   fixing ? '#e5e7eb' : '#92400e',
+              color:        fixing ? '#9ca3af' : '#fff',
+              fontSize:     12,
+              fontWeight:   600,
+              cursor:       fixing ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {fixing ? 'Fixing…' : 'Fix All Issues'}
+          </button>
+        )}
+      </div>
       <ul style={{ margin: 0, paddingLeft: 20, display: 'flex', flexDirection: 'column', gap: 6 }}>
         {issues.map((issue, i) => (
           <li key={i} style={{ fontSize: 13, color: '#78350f', lineHeight: 1.5 }}>{issue}</li>
@@ -73,7 +94,18 @@ function DownloadBtn({ label, onClick }) {
 
 export default function ResearchConductor() {
   const { run, reset, status, events, metrics, agentStatus, result, error } = useResearch()
+  const thesisChat = useThesisChat()
+  const chatSectionRef = useRef(null)
   const [topic, setTopic] = useState('')
+
+  const handleFixAll = () => {
+    if (!result?.critic_feedback?.length) return
+    const issues = result.critic_feedback.map((iss, i) => `${i + 1}. ${iss}`).join('\n')
+    const prompt = `Please rewrite the research draft addressing ALL of these outstanding issues and produce a complete, polished version with proper in-text citations (Author et al., Year):\n\n${issues}`
+    thesisChat.send(prompt, result)
+    // Scroll to chat
+    setTimeout(() => chatSectionRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
+  }
 
   const handleRun = () => {
     if (!topic.trim() || status === 'running') return
@@ -276,7 +308,11 @@ export default function ResearchConductor() {
           </div>
 
           {/* Outstanding issues */}
-          <OutstandingIssues issues={result.critic_feedback || []} />
+          <OutstandingIssues
+            issues={result.critic_feedback || []}
+            onFixAll={handleFixAll}
+            fixing={thesisChat.streaming}
+          />
 
           {/* Research draft */}
           {result.draft && (
@@ -332,8 +368,8 @@ export default function ResearchConductor() {
           )}
 
           {/* Thesis chat */}
-          <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 28 }}>
-            <ThesisChat researchResult={result} />
+          <div ref={chatSectionRef} style={{ borderTop: '1px solid #e5e7eb', paddingTop: 28 }}>
+            <ThesisChat researchResult={result} chatHook={thesisChat} />
           </div>
         </div>
       )}

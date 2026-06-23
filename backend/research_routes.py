@@ -220,23 +220,40 @@ async def research_result(job_id: str):
 
 @router.post("/api/research/chat")
 async def research_chat(req: ChatRequest):
-    """Streams thesis-assistant reply token-by-token."""
+    """Streams thesis-assistant reply token-by-token (true LLM streaming)."""
     async def _stream():
-        try:
-            reply = await asyncio.to_thread(
-                _ra.chat_with_research,
-                req.message,
-                req.result,
-                req.history,
-            )
-            words = reply.split(" ")
-            for i, word in enumerate(words):
-                token = word if i == 0 else " " + word
-                yield f"data: {json.dumps({'token': token})}\n\n"
-                await asyncio.sleep(0.015)
-            yield 'data: {"done": true}\n\n'
-        except Exception as exc:
-            yield f"data: {json.dumps({'error': str(exc)})}\n\n"
+        # Immediate ping so the browser knows the connection is alive
+        yield ": ping\n\n"
+
+        loop  = asyncio.get_event_loop()
+        queue: asyncio.Queue = asyncio.Queue()
+        _DONE = object()
+
+        def on_token(delta: str):
+            asyncio.run_coroutine_threadsafe(queue.put(delta), loop)
+
+        def run():
+            try:
+                _ra.stream_chat_with_research(req.message, req.result, req.history, on_token)
+            except Exception as exc:
+                asyncio.run_coroutine_threadsafe(
+                    queue.put({"__error__": str(exc)}), loop
+                )
+            finally:
+                asyncio.run_coroutine_threadsafe(queue.put(_DONE), loop)
+
+        threading.Thread(target=run, daemon=True, name="chat-stream").start()
+
+        while True:
+            item = await queue.get()
+            if item is _DONE:
+                break
+            if isinstance(item, dict) and "__error__" in item:
+                yield f"data: {json.dumps({'error': item['__error__']})}\n\n"
+                break
+            yield f"data: {json.dumps({'token': item})}\n\n"
+
+        yield 'data: {"done": true}\n\n'
 
     return StreamingResponse(
         _stream(),

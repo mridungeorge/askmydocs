@@ -45,9 +45,9 @@ MODELS = {
     "critic": os.getenv("LLM_CRITIC", "meta/llama-3.1-70b-instruct"),  # free — academic review
 }
 
-MAX_ROUNDS             = 5
+MAX_ROUNDS             = 3
 MAX_RETRIES            = 2
-MAX_CONFIDENCE_RETRIES = 4   # re-augment papers if confidence < CONFIDENCE_THRESHOLD
+MAX_CONFIDENCE_RETRIES = 3   # re-augment papers if confidence < CONFIDENCE_THRESHOLD
 CONFIDENCE_THRESHOLD   = 0.35
 EMBEDDINGS_MODEL       = os.getenv("EMBEDDINGS_MODEL", "nvidia/nv-embedqa-e5-v5")
 
@@ -874,7 +874,7 @@ async def critic2_agent(state: dict) -> dict:
         conf += min(len(state.get("papers", [])) * 0.05, 0.20)
         conf += 0.08 if currency in ("STABLE", "EMERGING") else 0.0
         conf -= 0.10 if currency in ("DECLINING", "DEAD") else 0.0
-        conf -= max(0, state["round_num"] - 1) * 0.05
+        # No round penalty — more rounds should reflect draft quality, not iteration count
         conf = min(conf, 0.79)  # never cross threshold without a PASS verdict
     state["confidence"] = round(max(0.05, min(conf, 0.99)), 2)
 

@@ -284,27 +284,46 @@ export default function ResearchConductor() {
       {status === 'done' && result && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
-          {/* Final verdict */}
+          {/* Final verdict + rubric breakdown */}
           <div style={{
-            padding:      '12px 16px',
+            padding:      '14px 16px',
             borderRadius: 10,
             background:   result.final_verdict === 'PASS' ? '#f0fdf4' : '#fffbeb',
             border:       `1px solid ${result.final_verdict === 'PASS' ? '#86efac' : '#fde68a'}`,
-            display:      'flex',
-            gap:          12,
-            alignItems:   'center',
           }}>
-            <span style={{ fontSize: 20 }}>{result.final_verdict === 'PASS' ? '✓' : '⚠'}</span>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: result.final_verdict === 'PASS' ? '#15803d' : '#92400e' }}>
-                {result.final_verdict === 'PASS' ? 'Research passed quality review' : 'Research requires human review'}
-              </div>
-              <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
-                Confidence {confPct}
-                {result.papers?.length > 0 ? ` · ${result.papers.length} papers` : ' · no papers found'}
-                {result.round_num > 0 ? ` · ${result.round_num} review round(s)` : ''}
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: result.critic_scores ? 12 : 0 }}>
+              <span style={{ fontSize: 20 }}>{result.final_verdict === 'PASS' ? '✓' : '⚠'}</span>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: result.final_verdict === 'PASS' ? '#15803d' : '#92400e' }}>
+                  {result.final_verdict === 'PASS' ? 'Research passed quality review' : 'Research requires human review'}
+                </div>
+                <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
+                  Confidence {confPct}
+                  {result.papers?.length > 0 ? ` · ${result.papers.length} papers` : ' · no papers found'}
+                  {result.round_num > 0 ? ` · ${result.round_num} review round(s)` : ''}
+                </div>
               </div>
             </div>
+            {result.critic_scores && (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                {[
+                  { key: 'citation_integrity', label: 'Citations' },
+                  { key: 'aspect_coverage',    label: 'Coverage' },
+                  { key: 'evidence_strength',  label: 'Evidence' },
+                  { key: 'academic_quality',   label: 'Quality' },
+                ].map(({ key, label }) => {
+                  const raw = result.critic_scores[key] ?? 0
+                  const pct = Math.round(raw * 4 * 100)  // /0.25 → 0-100%
+                  const color = pct >= 70 ? '#15803d' : pct >= 40 ? '#92400e' : '#b91c1c'
+                  return (
+                    <div key={key} style={{ background: '#fff8', borderRadius: 8, padding: '8px 10px', textAlign: 'center' }}>
+                      <div style={{ fontSize: 16, fontWeight: 700, color }}>{pct}%</div>
+                      <div style={{ fontSize: 10, color: '#888', marginTop: 2 }}>{label}</div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
           {/* Outstanding issues */}

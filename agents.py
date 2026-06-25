@@ -48,7 +48,7 @@ MODELS = {
 MAX_ROUNDS             = 3
 MAX_RETRIES            = 2
 MAX_CONFIDENCE_RETRIES = 3   # re-augment papers if confidence < CONFIDENCE_THRESHOLD
-CONFIDENCE_THRESHOLD   = 0.35
+CONFIDENCE_THRESHOLD   = 0.50  # rubric total < 0.50/1.00 means paper pool is too thin
 EMBEDDINGS_MODEL       = os.getenv("EMBEDDINGS_MODEL", "nvidia/nv-embedqa-e5-v5")
 
 _client    = None
@@ -789,10 +789,9 @@ async def writer_agent(state: dict) -> dict:
 async def critic2_agent(state: dict) -> dict:
     _prog.push("critic_2", "start", "Reviewing draft...")
 
-    plan    = state.get("search_plan") or {}
-    aspects = plan.get("aspects", [])
-
-    # Use full rag_context not truncated at 2000 chars
+    plan        = state.get("search_plan") or {}
+    aspects     = plan.get("aspects", [])
+    currency    = state.get("currency_verdict", "")
     rag_context = state.get("writer_rag_context") or state.get("rag_context", "")
 
     reply = await asyncio.to_thread(
@@ -801,46 +800,53 @@ async def critic2_agent(state: dict) -> dict:
             {
                 "role": "system",
                 "content": (
-                    "You are a senior academic reviewer for a peer-reviewed research journal. "
-                    "You apply strict standards. Your role is NOT to be encouraging — it is to find "
-                    "every flaw that would prevent this draft from being cited in a thesis. "
-                    "You are given the exact source papers the writer had access to, so you can verify "
-                    "every citation claim."
+                    "You are a senior academic reviewer. Evaluate the draft against four criteria "
+                    "and assign an honest confidence score. Do NOT encourage — penalise every flaw."
                 ),
             },
             {
                 "role": "user",
                 "content": (
                     f"TOPIC: \"{state['topic']}\"\n"
-                    f"REQUIRED ASPECTS TO COVER: {json.dumps(aspects)}\n\n"
-                    f"DRAFT TO REVIEW:\n{state['draft']}\n\n"
-                    f"SOURCE PAPERS (the only papers the writer was allowed to cite):\n{rag_context}\n\n"
-                    "REVIEW CRITERIA:\n"
-                    "1. CITATION INTEGRITY — does every factual claim cite a paper from SOURCE PAPERS? "
-                    "Flag any fabricated or uncited claims.\n"
-                    "2. ASPECT COVERAGE — is every required aspect addressed substantively? "
-                    "Flag any aspect that is absent or superficial.\n"
-                    "3. OVERSTATEMENT — are any conclusions stronger than what the cited papers support?\n"
-                    "4. VAGUENESS — flag generic statements that could apply to any topic (e.g. 'research shows', 'studies indicate')\n"
-                    "5. CURRENCY — if topic is DECLINING or DEAD, does the draft acknowledge this?\n\n"
-                    "VERDICT DEFINITIONS:\n"
-                    "- PASS: all aspects covered, all claims cited from source papers, no overstatement\n"
-                    "- REVISE: fixable issues (missing aspect, 1-2 weak citations, minor vagueness)\n"
-                    "- REJECT: fundamental flaw (fabricated citations, wrong topic focus, ignores currency)\n\n"
-                    "Return ONLY valid JSON (no markdown fences):\n"
+                    f"REQUIRED ASPECTS: {json.dumps(aspects)}\n"
+                    f"RESEARCH CURRENCY: {currency}\n\n"
+                    f"DRAFT:\n{state['draft']}\n\n"
+                    f"SOURCE PAPERS (writer may only cite these):\n{rag_context}\n\n"
+                    "EVALUATE each criterion from 0.00 to 0.25 (be strict — a perfect score is rare):\n\n"
+                    "A. CITATION INTEGRITY (0–0.25)\n"
+                    "   Does every factual claim cite a paper from SOURCE PAPERS?\n"
+                    "   0.25 = every claim cited correctly | 0.10 = some uncited claims | 0.00 = fabricated citations\n\n"
+                    "B. ASPECT COVERAGE (0–0.25)\n"
+                    "   Are ALL required aspects addressed substantively?\n"
+                    "   0.25 = all aspects covered well | 0.10 = 1–2 aspects missing | 0.00 = most aspects absent\n\n"
+                    "C. EVIDENCE STRENGTH (0–0.25)\n"
+                    "   Do cited papers actually support the claims made?\n"
+                    "   0.25 = strong, relevant evidence | 0.10 = weak or tangential | 0.00 = evidence contradicts claims\n\n"
+                    "D. ACADEMIC QUALITY (0–0.25)\n"
+                    "   Is the draft coherent, specific, and free of vague filler?\n"
+                    "   0.25 = rigorous academic prose | 0.10 = some vagueness | 0.00 = generic/off-topic\n\n"
+                    "VERDICT (based on total confidence = A+B+C+D):\n"
+                    "- PASS: confidence >= 0.75 AND no fabricated citations\n"
+                    "- REVISE: confidence 0.40–0.74 OR fixable issues\n"
+                    "- REJECT: confidence < 0.40 OR fabricated citations OR fundamentally off-topic\n\n"
+                    "Return ONLY valid JSON (no markdown, no extra keys):\n"
                     "{\n"
-                    '  "verdict": "PASS|REVISE|REJECT",\n'
+                    '  "citation_integrity": 0.18,\n'
+                    '  "aspect_coverage": 0.20,\n'
+                    '  "evidence_strength": 0.15,\n'
+                    '  "academic_quality": 0.17,\n'
+                    '  "verdict": "REVISE",\n'
                     '  "issues": [\n'
-                    '    "Specific actionable issue — what is wrong AND how to fix it",\n'
+                    '    "Specific issue — what is wrong AND how to fix it",\n'
                     '    "Issue 2"\n'
                     "  ]\n"
                     "}\n\n"
-                    "List at most 5 issues, prioritised by severity. "
+                    "List at most 5 issues ordered by severity. "
                     "If verdict is PASS, issues should be empty or contain only minor polish notes."
                 ),
             },
         ],
-        max_tokens=600,
+        max_tokens=700,
         model=MODELS["critic"],
         timeout=120,
     )
@@ -849,8 +855,36 @@ async def critic2_agent(state: dict) -> dict:
     verdict = data.get("verdict", "REVISE")
     issues  = data.get("issues", [])
 
+    # Confidence is the sum of the four rubric scores assigned by the critic
+    citation_score  = float(data.get("citation_integrity",  0.12))
+    aspect_score    = float(data.get("aspect_coverage",     0.12))
+    evidence_score  = float(data.get("evidence_strength",   0.10))
+    quality_score   = float(data.get("academic_quality",    0.10))
+    conf = citation_score + aspect_score + evidence_score + quality_score
+
+    # Sanity-clamp each dimension to [0, 0.25] in case LLM hallucinated out-of-range values
+    conf = (
+        min(max(citation_score, 0.0), 0.25)
+        + min(max(aspect_score,   0.0), 0.25)
+        + min(max(evidence_score, 0.0), 0.25)
+        + min(max(quality_score,  0.0), 0.25)
+    )
+
+    # Verdict consistency guard: if the LLM says PASS but scored < 0.75, trust the score
+    if verdict == "PASS" and conf < 0.75:
+        verdict = "REVISE"
+    if verdict == "REJECT" and conf >= 0.40:
+        verdict = "REVISE"
+
     state["critic_feedback"] = issues
+    state["critic_scores"]   = {
+        "citation_integrity": round(citation_score, 2),
+        "aspect_coverage":    round(aspect_score,   2),
+        "evidence_strength":  round(evidence_score, 2),
+        "academic_quality":   round(quality_score,  2),
+    }
     state["round_num"]      += 1
+    state["confidence"]      = round(max(0.05, min(conf, 0.99)), 2)
 
     if verdict == "PASS":
         state["final_verdict"] = "PASS"
@@ -861,28 +895,15 @@ async def critic2_agent(state: dict) -> dict:
     else:
         state["final_verdict"] = "REVISE"
 
-    # Confidence: PASS floors at 0.80 (guarantees threshold); non-PASS caps at 0.79
-    # (so it always triggers augmentation retries until we get a real PASS).
-    currency = state.get("currency_verdict", "")
-    if verdict == "PASS":
-        conf = 0.80
-        conf += min(len(state.get("papers", [])) * 0.02, 0.14)
-        conf += 0.05 if currency in ("STABLE", "EMERGING") else 0.0
-    else:
-        conf = 0.50
-        conf -= min(len(issues) * 0.06, 0.30)
-        conf += min(len(state.get("papers", [])) * 0.05, 0.20)
-        conf += 0.08 if currency in ("STABLE", "EMERGING") else 0.0
-        conf -= 0.10 if currency in ("DECLINING", "DEAD") else 0.0
-        # No round penalty — more rounds should reflect draft quality, not iteration count
-        conf = min(conf, 0.79)  # never cross threshold without a PASS verdict
-    state["confidence"] = round(max(0.05, min(conf, 0.99)), 2)
-
-    print(f"  -> verdict={verdict} round={state['round_num']} confidence={state['confidence']}")
+    print(
+        f"  -> verdict={verdict} round={state['round_num']} confidence={state['confidence']} "
+        f"(cit={citation_score:.2f} asp={aspect_score:.2f} ev={evidence_score:.2f} qual={quality_score:.2f})"
+    )
     _prog.push(
         "critic_2", "done",
         f"{verdict} | confidence {state['confidence']:.0%}",
         verdict=verdict, round=state["round_num"], confidence=state["confidence"],
+        scores=state["critic_scores"],
     )
     return state
 

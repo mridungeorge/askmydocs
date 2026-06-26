@@ -34,7 +34,7 @@ async def search_semantic_scholar(query: str, limit: int = 5,
     params = {
         "query": query,
         "limit": limit,
-        "fields": "title,authors,year,abstract,citationCount,externalIds",
+        "fields": "title,authors,year,abstract,citationCount,externalIds,venue,journal,publicationVenue",
     }
     if year_from or year_to:
         params["year"] = f"{year_from or ''}-{year_to or ''}"
@@ -65,14 +65,27 @@ async def search_semantic_scholar(query: str, limit: int = 5,
 
     papers = []
     for p in data.get("data", []):
+        ext_ids = p.get("externalIds") or {}
+        journal_obj = p.get("journal") or {}
+        venue_obj   = p.get("publicationVenue") or {}
+        journal_name = (
+            journal_obj.get("name")
+            or venue_obj.get("name")
+            or p.get("venue")
+            or ""
+        )
         papers.append({
-            "title":     p.get("title") or "Untitled",
-            "authors":   ", ".join(a.get("name", "") for a in (p.get("authors") or [])[:3]),
-            "year":      p.get("year"),
-            "abstract":  (p.get("abstract") or "")[:500],
+            "title":    p.get("title") or "Untitled",
+            "authors":  ", ".join(a.get("name", "") for a in (p.get("authors") or [])[:3]),
+            "year":     p.get("year"),
+            "abstract": (p.get("abstract") or "")[:500],
             "citations": p.get("citationCount", 0),
-            "arxiv_id":  (p.get("externalIds") or {}).get("ArXiv"),
-            "source":    "semantic_scholar",
+            "arxiv_id": ext_ids.get("ArXiv"),
+            "doi":      ext_ids.get("DOI") or "",
+            "journal":  journal_name,
+            "volume":   journal_obj.get("volume") or "",
+            "pages":    journal_obj.get("pages") or "",
+            "source":   "semantic_scholar",
         })
     return papers
 

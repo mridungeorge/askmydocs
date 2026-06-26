@@ -1023,9 +1023,13 @@ THESIS_SECTION_GUIDES = {
         "Target length: 300-400 words. No new citations."
     ),
     "bibliography": (
-        "Format: APA 7th edition. "
-        "Include all papers from the source list. "
-        "Sort alphabetically by first author surname."
+        "Format each reference in APA 7th edition using ONLY the fields provided in the SOURCE PAPERS list above. "
+        "NEVER write placeholder text like '[Insert journal name]', '[Insert reference details]', or similar. "
+        "If a field (journal, volume, pages) is not in the source data, omit it entirely — do not guess or invent it. "
+        "If a DOI is available, include it as https://doi.org/... at the end. "
+        "If only an arXiv ID is available, format as: arXiv:XXXX.XXXXX. "
+        "Sort references alphabetically by first author surname. "
+        "Use 'n.d.' when the year is not available."
     ),
 }
 
@@ -1041,9 +1045,29 @@ def _build_chat_messages(user_message: str, result: dict, history: list[dict]) -
 
     paper_entries = []
     for p in papers[:20]:
+        # Build citation line from whatever fields are actually populated
+        journal  = p.get("journal") or ""
+        volume   = p.get("volume") or ""
+        pages    = p.get("pages") or ""
+        doi      = p.get("doi") or ""
+        arxiv_id = p.get("arxiv_id") or ""
+
+        citation_parts = []
+        if journal:
+            part = journal
+            if volume: part += f", {volume}"
+            if pages:  part += f", {pages}"
+            citation_parts.append(part)
+        if doi:
+            citation_parts.append(f"https://doi.org/{doi}")
+        elif arxiv_id:
+            citation_parts.append(f"arXiv:{arxiv_id}")
+
+        citation_line = ". ".join(citation_parts) if citation_parts else f"[{p.get('source', 'unknown source')}]"
+
         entry = (
-            f"- {p.get('authors', 'Unknown')} ({p.get('year', '?')}). "
-            f"{p.get('title', 'Untitled')}. [{p.get('source', '')}]\n"
+            f"- {p.get('authors', 'Unknown')} ({p.get('year', 'n.d.')}). "
+            f"{p.get('title', 'Untitled')}. {citation_line}\n"
             f"  Abstract: {p.get('abstract', 'Not available')[:250]}"
         )
         paper_entries.append(entry)

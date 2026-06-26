@@ -1023,13 +1023,15 @@ THESIS_SECTION_GUIDES = {
         "Target length: 300-400 words. No new citations."
     ),
     "bibliography": (
-        "Format each reference in APA 7th edition using ONLY the fields provided in the SOURCE PAPERS list above. "
-        "NEVER write placeholder text like '[Insert journal name]', '[Insert reference details]', or similar. "
-        "If a field (journal, volume, pages) is not in the source data, omit it entirely — do not guess or invent it. "
-        "If a DOI is available, include it as https://doi.org/... at the end. "
-        "If only an arXiv ID is available, format as: arXiv:XXXX.XXXXX. "
-        "Sort references alphabetically by first author surname. "
-        "Use 'n.d.' when the year is not available."
+        "Produce an APA 7th edition reference list using STRICTLY the labelled fields in SOURCE PAPERS. "
+        "Each paper entry is labelled: AUTHORS=, YEAR=, TITLE=, and optionally JOURNAL=, VOL=, PAGES=, DOI=, ARXIV=. "
+        "FORMAT RULE: include a field in the reference ONLY if it appears in that paper's labels. "
+        "NEVER invent or guess journal name, volume, issue number, or page range — omit them if not labelled. "
+        "NEVER write '[Insert ...]' or any placeholder text. "
+        "DOI: if DOI= is present, end the entry with https://doi.org/<value>. "
+        "ArXiv: if ARXIV= is present and no DOI, end with arXiv:<value>. "
+        "Year: use n.d. if YEAR=n.d. — never substitute a different year. "
+        "Sort alphabetically by first author surname."
     ),
 }
 
@@ -1045,30 +1047,36 @@ def _build_chat_messages(user_message: str, result: dict, history: list[dict]) -
 
     paper_entries = []
     for p in papers[:20]:
-        # Build citation line from whatever fields are actually populated
+        # Use only fields that are actually populated — never fall through to None
+        year     = p.get("year") or "n.d."
+        authors  = p.get("authors") or "Unknown"
+        title    = p.get("title") or "Untitled"
         journal  = p.get("journal") or ""
         volume   = p.get("volume") or ""
         pages    = p.get("pages") or ""
         doi      = p.get("doi") or ""
         arxiv_id = p.get("arxiv_id") or ""
 
-        citation_parts = []
+        # Build explicit field labels so LLM can't confuse source with journal
+        meta_parts = []
         if journal:
-            part = journal
-            if volume: part += f", {volume}"
-            if pages:  part += f", {pages}"
-            citation_parts.append(part)
+            jpart = f"JOURNAL={journal}"
+            if volume: jpart += f" VOL={volume}"
+            if pages:  jpart += f" PAGES={pages}"
+            meta_parts.append(jpart)
         if doi:
-            citation_parts.append(f"https://doi.org/{doi}")
-        elif arxiv_id:
-            citation_parts.append(f"arXiv:{arxiv_id}")
+            meta_parts.append(f"DOI={doi}")
+        if arxiv_id:
+            meta_parts.append(f"ARXIV={arxiv_id}")
+        if not meta_parts:
+            meta_parts.append(f"SOURCE={p.get('source', 'unknown')}")
 
-        citation_line = ". ".join(citation_parts) if citation_parts else f"[{p.get('source', 'unknown source')}]"
+        meta_line = " | ".join(meta_parts)
 
         entry = (
-            f"- {p.get('authors', 'Unknown')} ({p.get('year', 'n.d.')}). "
-            f"{p.get('title', 'Untitled')}. {citation_line}\n"
-            f"  Abstract: {p.get('abstract', 'Not available')[:250]}"
+            f"- AUTHORS={authors} YEAR={year} TITLE={title}\n"
+            f"  {meta_line}\n"
+            f"  Abstract: {(p.get('abstract') or 'Not available')[:250]}"
         )
         paper_entries.append(entry)
     paper_list = "\n".join(paper_entries) if paper_entries else "No papers available."
@@ -1087,7 +1095,8 @@ def _build_chat_messages(user_message: str, result: dict, history: list[dict]) -
         f"- Research currency: {verdict} — {reason}\n"
         f"- Literature year range: {plan.get('year_from')} to {plan.get('year_to')}\n"
         f"- Key aspects identified: {', '.join(plan.get('aspects', []))}\n\n"
-        f"SOURCE PAPERS (cite ONLY from these, using APA 7th inline format: Author et al., Year):\n"
+        f"SOURCE PAPERS — each paper is labelled with explicit fields (AUTHORS, YEAR, TITLE, JOURNAL, VOL, PAGES, DOI, ARXIV, SOURCE).\n"
+        f"Use ONLY the values shown next to each label. Do NOT invent, guess, or fill in any field not explicitly provided:\n"
         f"{paper_list}\n\n"
         f"RESEARCH SNAPSHOT ALREADY WRITTEN (do not repeat this — build on it):\n"
         f"{draft[:4000]}\n"
@@ -1098,7 +1107,9 @@ def _build_chat_messages(user_message: str, result: dict, history: list[dict]) -
         "- APA 7th inline citation format: (Author et al., Year)\n"
         "- Academic register — no bullet points in prose sections\n"
         "- Be specific and substantive; if evidence is thin, say so explicitly\n"
-        "- Do not repeat content already well-covered in the Research Snapshot"
+        "- Do not repeat content already well-covered in the Research Snapshot\n"
+        "- NEVER invent journal names, volumes, pages, or DOIs not shown in SOURCE PAPERS\n"
+        "- If year is 'n.d.', write n.d. in the citation — do not guess a year"
     )
 
     messages = [{"role": "system", "content": system}]

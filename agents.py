@@ -1127,6 +1127,67 @@ def chat_with_research(
     return _chat(messages, max_tokens=1400, model=MODELS["writer"])
 
 
+def _apa_author(raw: str) -> str:
+    """Convert 'First Last' or 'F. Last' to APA 'Last, F.' format best-effort."""
+    parts = raw.strip().split()
+    if len(parts) == 1:
+        return parts[0]
+    surname = parts[-1]
+    initials = " ".join(p[0].upper() + "." for p in parts[:-1] if p)
+    return f"{surname}, {initials}"
+
+
+def _format_apa_bibliography(papers: list) -> str:
+    """
+    Build a guaranteed-accurate APA 7th reference list directly from paper data.
+    No LLM involved — zero hallucination risk.
+    """
+    entries = []
+    for p in papers:
+        # Authors
+        raw_authors = p.get("authors") or ""
+        author_list = [a.strip() for a in raw_authors.split(",") if a.strip()]
+        if len(author_list) == 1:
+            apa_authors = _apa_author(author_list[0])
+        elif len(author_list) == 2:
+            apa_authors = f"{_apa_author(author_list[0])}, & {_apa_author(author_list[1])}"
+        else:
+            apa_authors = f"{_apa_author(author_list[0])}, {_apa_author(author_list[1])}, & {_apa_author(author_list[2])}"
+
+        year     = str(p.get("year") or "n.d.")
+        title    = (p.get("title") or "Untitled").strip().rstrip(".")
+        journal  = (p.get("journal") or "").strip()
+        volume   = (p.get("volume") or "").strip()
+        pages    = (p.get("pages") or "").strip()
+        doi      = (p.get("doi") or "").strip()
+        arxiv_id = (p.get("arxiv_id") or "").strip()
+
+        # Build reference string — only include fields we actually have
+        ref = f"{apa_authors} ({year}). {title}."
+        if journal:
+            ref += f" *{journal}*"
+            if volume:
+                ref += f", *{volume}*"
+            if pages:
+                ref += f", {pages}"
+            ref += "."
+        if doi:
+            ref += f" https://doi.org/{doi}"
+        elif arxiv_id:
+            ref += f" arXiv:{arxiv_id}"
+
+        entries.append((author_list[0].split()[-1].lower() if author_list else "z", ref))
+
+    # Sort alphabetically by first author surname
+    entries.sort(key=lambda x: x[0])
+
+    header = "**References**\n\n"
+    return header + "\n\n".join(e[1] for e in entries)
+
+
+_BIBLIOGRAPHY_TRIGGERS = {"bibliography", "references", "reference list", "works cited", "cite all"}
+
+
 def stream_chat_with_research(
     user_message: str,
     result: dict,
@@ -1134,6 +1195,17 @@ def stream_chat_with_research(
     on_token,           # callable(str) — called for each streamed token
 ) -> None:
     """Stream thesis-chat tokens via callback. Runs synchronously in a thread."""
+
+    # Bibliography: bypass LLM entirely — format from raw paper data
+    msg_lower = user_message.lower()
+    if any(t in msg_lower for t in _BIBLIOGRAPHY_TRIGGERS):
+        papers = result.get("papers") or []
+        bib    = _format_apa_bibliography(papers)
+        # Stream character by character so UI renders the same way
+        for char in bib:
+            on_token(char)
+        return
+
     messages = _build_chat_messages(user_message, result, history)
     client   = get_client()
     stream   = client.chat.completions.create(

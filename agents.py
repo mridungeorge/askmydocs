@@ -27,13 +27,34 @@ import numpy as np
 from openai import OpenAI
 
 import progress as _prog
-from observability import (
-    log_info, log_warning, log_error,
-    timed_operation, async_timed_operation,
-    record_metric, increment_counter, record_error,
-    start_operation, end_operation,
-)
-from plugins.manager import plugin_manager
+
+# Optional observability — present locally, may not be on Railway
+try:
+    from observability import (
+        log_info, log_warning, log_error,
+        timed_operation, async_timed_operation,
+        record_metric, increment_counter, record_error,
+        start_operation, end_operation,
+    )
+except ModuleNotFoundError:
+    def log_info(msg, **kw):    print(f"[INFO] {msg}")
+    def log_warning(msg, **kw): print(f"[WARN] {msg}")
+    def log_error(msg, *a, **kw): print(f"[ERROR] {msg}")
+    def record_metric(*a, **kw): pass
+    def increment_counter(*a, **kw): pass
+    def record_error(*a, **kw): pass
+    def start_operation(*a, **kw): return None
+    def end_operation(*a, **kw): pass
+    def timed_operation(n): return lambda f: f
+    def async_timed_operation(n): return lambda f: f
+
+# Optional plugin system
+try:
+    from plugins.manager import plugin_manager as _plugin_manager
+    _HAS_PLUGINS = True
+except ModuleNotFoundError:
+    _plugin_manager = None
+    _HAS_PLUGINS = False
 
 from tools import (
     search_semantic_scholar, search_arxiv, scrape_pubmed,
@@ -46,11 +67,12 @@ _PLUGINS_INITIALIZED = False
 
 def _initialize_plugins():
     global _PLUGINS_INITIALIZED
-    if _PLUGINS_INITIALIZED:
+    if _PLUGINS_INITIALIZED or not _HAS_PLUGINS:
+        _PLUGINS_INITIALIZED = True
         return
     try:
-        plugin_manager.load_all_plugins()
-        log_info("Plugin system ready", plugins_loaded=len(plugin_manager.plugins))
+        _plugin_manager.load_all_plugins()
+        log_info("Plugin system ready", plugins_loaded=len(_plugin_manager.plugins))
     except Exception as e:
         log_warning(f"Plugin system init failed (non-fatal): {e}")
     _PLUGINS_INITIALIZED = True
@@ -58,8 +80,10 @@ def _initialize_plugins():
 def get_available_tools() -> dict:
     if not _PLUGINS_INITIALIZED:
         _initialize_plugins()
+    if not _HAS_PLUGINS:
+        return {}
     tools = {}
-    for name, plugin in plugin_manager.plugins.items():
+    for name, plugin in _plugin_manager.plugins.items():
         if hasattr(plugin, 'get_tools'):
             try:
                 for tool_name, fn in plugin.get_tools().items():
@@ -71,8 +95,10 @@ def get_available_tools() -> dict:
 def get_available_agents() -> dict:
     if not _PLUGINS_INITIALIZED:
         _initialize_plugins()
+    if not _HAS_PLUGINS:
+        return {}
     agents = {}
-    for name, plugin in plugin_manager.plugins.items():
+    for name, plugin in _plugin_manager.plugins.items():
         if hasattr(plugin, 'get_agents'):
             try:
                 for agent_name, cls in plugin.get_agents().items():

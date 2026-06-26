@@ -108,7 +108,7 @@ class ChatResponse(BaseModel):
     rewritten_query: str   = ""
 
 
-# ── Auth cookie endpoints ──────────────────────────────────────────────────────
+# ── Auth cookie endpoints ─────────────────────────────────────────────────────
 
 class SessionRequest(BaseModel):
     access_token:  str
@@ -155,7 +155,7 @@ async def logout(response: Response):
     return {"ok": True}
 
 
-# ── Public endpoints ──────────────────────────────────────────────────────────
+# ── Public endpoints ────────────────────────────────────────────────────────
 
 @app.get("/api/health")
 async def health():
@@ -176,11 +176,11 @@ async def ingest_url(
 ):
     try:
         from backend.summariser import generate_summary, save_summary
-        
+
         collection  = get_user_collection(user_id)
         title, text = extract_from_url(request.url)
         n           = ingest(title, "url", text, collection_name=collection)
-        
+
         # Generate and save summary
         summary = ""
         try:
@@ -188,7 +188,7 @@ async def ingest_url(
             save_summary(user_id, title, summary, n)
         except Exception as e:
             print(f"Summary generation failed: {e}")
-        
+
         log_document(user_id, title, "url", n)
         return {
             "title": title,
@@ -212,14 +212,14 @@ async def ingest_pdf(
     try:
         from backend.multimodal import process_pdf_multimodal
         from backend.summariser import generate_summary, save_summary
-        
+
         collection = get_user_collection(user_id)
         contents   = await file.read()
         title, text = extract_from_pdf(contents, file.filename)
-        
+
         # Ingest text chunks
         n_text = ingest(title, "pdf", text, collection_name=collection)
-        
+
         # Extract multimodal chunks if enabled
         n_extra = 0
         if multimodal:
@@ -231,7 +231,7 @@ async def ingest_pdf(
             except Exception as e:
                 # Multimodal extraction failed, but don't block PDF ingest
                 print(f"Multimodal extraction failed: {e}")
-        
+
         # Generate and save summary
         summary = ""
         try:
@@ -239,7 +239,7 @@ async def ingest_pdf(
             save_summary(user_id, title, summary, n_text + n_extra)
         except Exception as e:
             print(f"Summary generation failed: {e}")
-        
+
         log_document(user_id, title, "pdf", n_text + n_extra)
         return {
             "title": title,
@@ -278,6 +278,20 @@ async def chat(
 
         collection = get_user_collection(user_id)
 
+        # Step 0: Check guardrails first (FIXED: Added missing guardrails check)
+        doc_context = ""  # Could be enhanced with document context
+        guardrail_result = check_guardrails(request.query, doc_context)
+        if not guardrail_result["allowed"]:
+            # Return blocked response
+            return ChatResponse(
+                answer=guardrail_result["message"],
+                sources=[],
+                routing=RoutingInfo(),
+                agent_type="blocked",
+                quality_score=0.0,
+                rewritten_query=request.query,
+            )
+
         # Step 1: Embed query (needed for cache)
         query_vector = embed_query(request.query)
 
@@ -299,6 +313,7 @@ async def chat(
             source_name=request.source_name,
             history=request.history,
             collection=collection,
+            user_id=user_id,  # FIXED: Added missing user_id parameter
         )
 
         # Step 3.5: Fallback to web search if no sources found
@@ -349,7 +364,7 @@ async def chat_stream(
     """
     Streaming agentic RAG pipeline with SSE response.
     Sends tokens in real-time as LLM generates output.
-    
+
     SSE format:
     - data: {"type": "token", "content": "..."}\n\n
     - data: {"type": "done", "sources": [...], ...}\n\n
@@ -381,7 +396,7 @@ async def chat_stream(
                         token_data = json.dumps({"type": "token", "content": chunk + " "})
                         yield f'data: {token_data}\n\n'
                         await asyncio.sleep(0.01)  # Small delay for visual effect
-                    
+
                     latency_ms = int((time.time() - start_time) * 1000)
                     done_data = json.dumps({
                         "type": "done",
@@ -400,6 +415,7 @@ async def chat_stream(
                     source_name=request.source_name,
                     history=request.history,
                     collection=collection,
+                    user_id=user_id,  # FIXED: Added missing user_id parameter
                 )
                 print(f"[DEBUG] Agent completed, blocked={result.get('blocked', False)}")
 
@@ -407,7 +423,7 @@ async def chat_stream(
                 answer = result.get("answer", "No answer generated")
                 agent_type = result.get("agent_type", "")
                 sources = result.get("sources", [])
-                
+
                 if not sources and agent_type != "cached":
                     try:
                         from backend.websearch import answer_from_web
@@ -431,7 +447,7 @@ async def chat_stream(
 
                 # Step 6: Send completion metadata
                 latency_ms = int((time.time() - start_time) * 1000)
-                
+
                 # Convert sources to JSON-serializable format
                 sources_list = []
                 for s in sources:
@@ -443,7 +459,7 @@ async def chat_stream(
                             "score": s.get("score"),
                             "url": s.get("url"),
                         })
-                
+
                 done_data = json.dumps({
                     "type": "done",
                     "sources": sources_list,
@@ -468,7 +484,7 @@ async def chat_stream(
                 # Step 8: Log conversation and query
                 log_conversation(user_id, request.source_name, "user", request.query)
                 log_conversation(user_id, request.source_name, "assistant", answer)
-                
+
                 log_query_full(
                     user_id=user_id,
                     query=request.query,

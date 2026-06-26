@@ -315,7 +315,7 @@ def _structure_paper(text: str) -> dict:
 # ---------------------------------------------------------------------------
 
 async def currency_agent(state: dict) -> dict:
-    _prog.push("currency", "start", "Assessing topic currency across 5 sources...")
+    _prog.push("currency", "start", "Assessing topic currency across 6 sources...")
     topic     = state["topic"]
     plan      = state.get("search_plan") or {}
     year_from = plan.get("year_from")
@@ -367,7 +367,7 @@ async def currency_agent(state: dict) -> dict:
                 "content": (
                     f"Topic: \"{topic}\"\n"
                     f"Year range searched: {year_from}–{year_to}\n"
-                    f"Total papers found: {len(all_results)} across 5 sources\n"
+                    f"Total papers found: {len(all_results)} across 6 sources\n"
                     f"Papers published in last 2 years: {recent_count}\n\n"
                     f"Paper sample:\n{json.dumps(summary, indent=2)}\n\n"
                     "Classify the topic's research currency using EXACTLY one of these verdicts:\n"
@@ -569,7 +569,7 @@ async def paper_augmentation_agent(state: dict) -> dict:
 
     _prog.push("error_handler", "start",
                f"Confidence {conf:.0%} < {CONFIDENCE_THRESHOLD:.0%} — augmenting papers (attempt {cr}/{MAX_CONFIDENCE_RETRIES})...",
-               retry=cr)
+               confidence_retry=cr)  # Fixed: changed retry=cr to confidence_retry=cr for clarity
 
     plan      = state.get("search_plan") or {}
     aspects   = plan.get("aspects", [])
@@ -860,9 +860,9 @@ async def critic2_agent(state: dict) -> dict:
     aspect_score    = float(data.get("aspect_coverage",     0.12))
     evidence_score  = float(data.get("evidence_strength",   0.10))
     quality_score   = float(data.get("academic_quality",    0.10))
-    conf = citation_score + aspect_score + evidence_score + quality_score
 
     # Sanity-clamp each dimension to [0, 0.25] in case LLM hallucinated out-of-range values
+    # (Removed redundant calculation that was here before)
     conf = (
         min(max(citation_score, 0.0), 0.25)
         + min(max(aspect_score,   0.0), 0.25)

@@ -474,6 +474,7 @@ def run_agent(
     history:     list = None,
     collection:  str  = None,
     doc_context: str  = "",
+    user_id:     str  = None,
 ) -> dict:
     graph = get_graph()
 

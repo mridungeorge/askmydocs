@@ -8,3 +8,5 @@ node_modules
 .streamlit/secrets.toml
 streamlit_*.txt
 *.log
+
+.vercel

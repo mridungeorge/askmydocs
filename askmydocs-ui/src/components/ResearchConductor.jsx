@@ -388,7 +388,9 @@ export default function ResearchConductor() {
 
           {/* Thesis chat */}
           <div ref={chatSectionRef} style={{ borderTop: '1px solid #e5e7eb', paddingTop: 28 }}>
-            <ThesisChat researchResult={result} chatHook={thesisChat} />
+            <div style={{ borderRadius: 16, overflow: 'hidden', minHeight: 520, display: 'flex', flexDirection: 'column', boxShadow: '0 4px 24px rgba(99,102,241,0.08), 0 1px 4px rgba(0,0,0,0.06)' }}>
+              <ThesisChat researchResult={result} chatHook={thesisChat} />
+            </div>
           </div>
         </div>
       )}

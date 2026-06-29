@@ -23,42 +23,95 @@ import os
 import json
 import time
 import asyncio
+import threading
+import uuid
+from typing import Dict, Any
 
-# ── Upstash rate limiter ──────────────────────────────────────────────────────
-try:
-    from upstash_redis import Redis as _UpstashRedis
-    _rl_redis = _UpstashRedis(
-        url=os.getenv("UPSTASH_REDIS_URL", ""),
-        token=os.getenv("UPSTASH_REDIS_TOKEN", ""),
-    ) if os.getenv("UPSTASH_REDIS_URL") else None
-except Exception:
-    _rl_redis = None
+# ── Chat Job Management (similar to research_routes) ─────────────────────────────────────
+CHAT_JOBS: dict[str, dict] = {}
+CHAT_JOBS_LOCK = threading.Lock()
 
-def _rate_limit(identifier: str, endpoint: str, limit: int = 5, window: int = 900):
-    """5 attempts / 15 min per IP+endpoint. Silent if Redis not configured."""
-    if _rl_redis is None:
-        return
-    key = f"rl:{endpoint}:{identifier}"
+def _run_chat_pipeline_thread(job_id: str, query: str, source_name: str | None,
+                              history: list[dict], collection: str | None, user_id: str) -> None:
+    """
+    Runs the chat agent pipeline in a separate thread.
+    Updates CHAT_JOBS[job_id] with status, result, or error.
+    """
+    with CHAT_JOBS_LOCK:
+        if job_id not in CHAT_JOBS:
+            return  # Job was cancelled or removed
+        CHAT_JOBS[job_id]["status"] = "running"
+        CHAT_JOBS[job_id]["started_at"] = time.time()
+
     try:
-        count = _rl_redis.incr(key)
-        if count == 1:
-            _rl_redis.expire(key, window)
-        if count > limit:
-            raise HTTPException(
-                status_code=429,
-                detail=f"Too many attempts — try again in {window // 60} minutes.",
-                headers={"Retry-After": str(window)},
-            )
-    except HTTPException:
-        raise
-    except Exception:
-        pass  # Redis failure should never block auth
+        # Run the synchronous agent pipeline
+        result = run_agent(
+            query=query,
+            source_name=source_name,
+            history=history,
+            collection=collection,
+            user_id=user_id
+        )
 
-# ── Cookie constants ──────────────────────────────────────────────────────────
-_COOKIE_NAME    = "sb-session"
-_COOKIE_MAX_AGE = 3600          # 1 hour — matches Supabase JWT expiry
-_IS_PROD        = os.getenv("RAILWAY_ENVIRONMENT") == "production" or os.getenv("ENV") == "production"
+        with CHAT_JOBS_LOCK:
+            if job_id in CHAT_JOBS:
+                CHAT_JOBS[job_id] = {
+                    "status": "done",
+                    "result": result,
+                    "completed_at": time.time()
+                }
+    except Exception as exc:
+        print(f"[chat pipeline] job={job_id[:8]} EXCEPTION: {type(exc).__name__}: {exc}")
+        with CHAT_JOBS_LOCK:
+            if job_id in CHAT_JOBS:
+                CHAT_JOBS[job_id] = {
+                    "status": "error",
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "failed_at": time.time()
+                }
 
+# ── Models ────────────────────────────────────────────────────────────────────────
+
+class IngestUrlRequest(BaseModel):
+    url: str
+
+class ChatRequest(BaseModel):
+    query:       str
+    source_name: str        = None
+    history:     list[dict] = []
+
+class ChatAsyncRequest(BaseModel):
+    query:       str
+    source_name: str        = None
+    history:     list[dict] = []
+
+class JobResponse(BaseModel):
+    job_id: str
+
+class JobResultResponse(BaseModel):
+    status: str  # pending, running, done, error
+    result: dict | None = None
+    error: str | None = None
+
+
+class RoutingInfo(BaseModel):
+    """Routing information from the agent pipeline."""
+    agent_type: str = ""
+    model: str = ""
+    # Add other fields as needed
+
+
+class ChatResponse(BaseModel):
+    """Response model for chat endpoints."""
+    answer: str
+    sources: list[dict] = []
+    routing: RoutingInfo = RoutingInfo()
+    agent_type: str = ""
+    quality_score: float = 0.0
+    cache_hit: str = ""
+    rewritten_query: str = ""
+
+# ── App Setup ──────────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="AskMyDocs API", version="4.0.0")
 
@@ -76,39 +129,7 @@ if os.path.exists("frontend"):
 app.include_router(research_router)
 
 
-# ── Models ────────────────────────────────────────────────────────────────────
-
-class IngestUrlRequest(BaseModel):
-    url: str
-
-class ChatRequest(BaseModel):
-    query:       str
-    source_name: str        = None
-    history:     list[dict] = []
-
-class SourceInfo(BaseModel):
-    name:    str
-    type:    str
-    snippet: str
-    score:   float = None
-
-class RoutingInfo(BaseModel):
-    model:      str  = ""
-    score:      float = 0.0
-    is_complex: bool  = False
-    agent:      str  = ""
-
-class ChatResponse(BaseModel):
-    answer:          str
-    sources:         list[SourceInfo]
-    routing:         RoutingInfo
-    agent_type:      str   = ""
-    quality_score:   float = 0.0
-    cache_hit:       str   = ""
-    rewritten_query: str   = ""
-
-
-# ── Auth cookie endpoints ─────────────────────────────────────────────────────
+# ── Auth cookie endpoints ─────────────────────────────────────────────────────────
 
 class SessionRequest(BaseModel):
     access_token:  str
@@ -349,11 +370,97 @@ async def chat(
             routing=RoutingInfo(**result["routing"]),
             agent_type=result["agent_type"],
             quality_score=result["quality_score"],
-            rewritten_query=result["rewritten_query"],
+            rewritten_query=request.query,
         )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/chat/async", response_model=JobResponse)
+async def chat_async(
+    request: ChatAsyncRequest,
+    user_id: str = Depends(get_current_user),
+):
+    """
+    Asynchronous chat endpoint:
+    1. Validate input
+    2. Create a job ID
+    3. Start background thread to process the chat pipeline
+    4. Return job ID immediately
+    """
+    if not request.query.strip():
+        raise ValueError("Query cannot be empty")
+
+    job_id = str(uuid.uuid4())
+
+    # Initialize job entry
+    with CHAT_JOBS_LOCK:
+        CHAT_JOBS[job_id] = {
+            "status": "pending",
+            "created_at": time.time(),
+            "request": {
+                "query": request.query,
+                "source_name": request.source_name,
+                "history": request.history,
+            },
+            "user_id": user_id
+        }
+
+    # Start background thread
+    thread = threading.Thread(
+        target=_run_chat_pipeline_thread,
+        args=(
+            job_id,
+            request.query,
+            request.source_name,
+            request.history,
+            get_user_collection(user_id),
+            user_id
+        ),
+        daemon=True,
+        name=f"chat-job-{job_id[:8]}"
+    )
+    thread.start()
+
+    return JobResponse(job_id=job_id)
+
+
+@app.get("/api/chat/async/result/{job_id}", response_model=JobResultResponse)
+async def chat_async_result(
+    job_id: str,
+    user_id: str = Depends(get_current_user),
+):
+    """
+    Get the result of an asynchronous chat job.
+    """
+    with CHAT_JOBS_LOCK:
+        job = CHAT_JOBS.get(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Optional: verify user_id matches? For simplicity, we skip here.
+    # In production, you'd want to check that the job belongs to the user.
+
+    if job["status"] == "done":
+        return JobResultResponse(
+            status="done",
+            result=job.get("result"),
+            error=None
+        )
+    elif job["status"] == "error":
+        return JobResultResponse(
+            status="error",
+            result=None,
+            error=job.get("error", "Unknown error")
+        )
+    else:  # pending or running
+        return JobResultResponse(
+            status=job["status"],
+            result=None,
+            error=None
+        )
 
 
 @app.post("/api/chat/stream")

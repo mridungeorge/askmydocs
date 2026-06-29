@@ -10,3 +10,14 @@ streamlit_*.txt
 *.log
 
 .vercel
+
+# Local dev only — not needed on Railway
+.agents/
+.claude/
+.mcp.json
+observability.py
+plugins/
+query_log.json
+skills-lock.json
+test_import.py
+test_pipeline.py
